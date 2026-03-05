@@ -52,8 +52,8 @@ class FastCNN(nn.Module):
         return x
 
 def main():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Training Fast Standard CNN Baseline on {device}...")
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Training Fast Standard CNN Baseline on {DEVICE}...")
     
     train_dataset = NMNISTDatasetBaseline('preprocessed_data_native', split='train')
     test_dataset = NMNISTDatasetBaseline('preprocessed_data_native', split='test')
@@ -65,7 +65,7 @@ def main():
         print("No training data found. Make sure preprocess_dataset.py completed successfully.")
         return
 
-    model = FastCNN().to(device)
+    model = FastCNN().to(DEVICE)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     
@@ -77,7 +77,7 @@ def main():
         total_loss = 0
         
         for inputs, targets in train_loader:
-            inputs, targets = inputs.to(device), targets.to(device)
+            inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
             optimizer.zero_grad()
             
             outputs = model(inputs)
@@ -97,7 +97,7 @@ def main():
         test_correct, test_total = 0, 0
         with torch.no_grad():
             for inputs, targets in test_loader:
-                inputs, targets = inputs.to(device), targets.to(device)
+                inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
                 outputs = model(inputs)
                 _, predicted = outputs.max(1)
                 test_total += targets.size(0)

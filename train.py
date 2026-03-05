@@ -38,8 +38,8 @@ class NMNISTDataset(Dataset):
         return spike_tensor, label
 
 def train_snn():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Executing STBP Training on Device: {device}")
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Executing STBP Training on Device: {DEVICE}")
 
     # 1. Dataset & DataLoaders
     # We use our subset preprocessed_data_native (we saved 500 samples earlier)
@@ -56,7 +56,7 @@ def train_snn():
     # 2. Model Initialization
     # The LeNet5_CSNN natively incorporates "Reset by Subtraction" (Soft Reset)
     # in the LIFNodes keeping Beta=0.9 and V_th=1.0 for optimum performance.
-    model = LeNet5_CSNN(in_channels=2, num_classes=10).to(device)
+    model = LeNet5_CSNN(in_channels=2, num_classes=10).to(DEVICE)
 
     # 3. Training Hyperparameters
     epochs = 5
@@ -77,7 +77,7 @@ def train_snn():
         total = 0
         
         for batch_idx, (inputs, targets) in enumerate(train_loader):
-            inputs, targets = inputs.to(device), targets.to(device)
+            inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
             
             optimizer.zero_grad()
             
@@ -107,7 +107,7 @@ def train_snn():
         
         with torch.no_grad():
             for inputs, targets in test_loader:
-                inputs, targets = inputs.to(device), targets.to(device)
+                inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
                 spike_rate, output_spikes = model(inputs)
                 
                 loss = criterion(spike_rate, targets)

@@ -2,59 +2,64 @@
 
 This repository contains a full pipeline to process the natively event-based N-MNIST dataset and train a deep **Convolutional Spiking Neural Network (CSNN)** using Surrogate Gradient Backpropagation (STBP).
 
-The pipeline involves:
-1. `preprocess_dataset.py` - Converts 70,000 raw `.bin` polarity events into static `[T, C, H, W]` Spatio-Temporal matrices.
-2. `snn_model.py` - Core PyTorch dynamics implementing a strict LeNet-5 Spiking Architecture over time (`T=20`).
-3. `train.py` - Supervised STBP learning loop utilizing Rate Coding Cross Entropy.
-4. `train_fast_cnn.py` - A collapsed Artificial Neural Network (ANN) baseline to verify dataset health.
+## Complete Guide: From Raw Data to GPU Training
 
-## Quick-Start GPU Training Guide (Windows PowerShell)
+Follow these exact steps to set up the environment, process the raw N-MNIST spike events, and train the network on your GPU.
 
-If you have an NVIDIA GPU, you can train the full Convolutional SNN rapidly by running the following commands in order.
+### Step 1: Ensure you have the N-MNIST Dataset
+Make sure you have downloaded the N-MNIST dataset. You must have the two zip files sitting perfectly in the root directory of this project:
+- `Train.zip`
+- `Test.zip`
 
-### 1. Setup the Virtual Environment
-Create a clean PyTorch environment utilizing the official GPU CUDA wheels.
+*(Do not extract them yourself. The Python scripts will read directly from the `.zip` archives to save disk space and file indexing overhead.)*
+
+### Step 2: Set up the PyTorch GPU Environment (Windows PowerShell)
+You need an isolated Python environment with NVIDIA CUDA capabilities to execute the Surrogate Gradient training efficiently. Run these exact rules in your PowerShell terminal inside the project directory:
 
 ```powershell
-# 1. Create native isolated environment and bypass Windows Execution protections
+# 1. Create a native isolated virtual environment
 python -m venv venv
+
+# 2. Bypass Windows App Execution limits so you can activate the environment
 Set-ExecutionPolicy -ExecutionPolicy UNRESTRICTED -Scope CurrentUser
+
+# 3. Activate the virtual environment! (You must do this every time you open a new terminal)
 .\venv\Scripts\Activate.ps1
 
-# 2. Upgrade pip module to avoid local cache errors
+# 4. Give pip an upgrade
 python -m pip install --upgrade pip
 
-# 3. Install PyTorch with NVIDIA CUDA 12.1 support (Replace cu121 with your CUDA version if different)
+# 5. Install PyTorch with NVIDIA CUDA 12.1 support (Change cu121 if your GPU uses a different version)
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
-# 4. Install supporting math/visualization libraries
+# 6. Install the supporting computation libraries
 pip install numpy scipy matplotlib
 ```
 
-### 2. Preprocess the Complete Dataset
-N-MNIST consists of 70,000 `.bin` files (`Train.zip` & `Test.zip`). 
+### Step 3: Preprocess the 70,000 N-MNIST Events
+The N-MNIST dataset format (`x, y, polarity, timestamp`) must be translated into spatial-temporal tensors `[Time, Channels, Height, Width]` for the deep network.
 
-Run the multiprocessing builder. This script leverages all your CPU cores to crunch and parse the files into structured `.npz` spike tensors inside a new `preprocessed_data_native/` folder.
-*This takes about 1-2 minutes on a fast CPU.*
+Launch the preprocessing pipeline. It uses multiprocessing across all your CPU cores to crunch 70,000 files in under 2 minutes.
 
 ```powershell
-# Ensure your virtual environment is active (.\venv\Scripts\Activate.ps1)
+# Make sure your environment is active: .\venv\Scripts\Activate.ps1
 python preprocess_dataset.py
 ```
+*Wait for this to finish printing "All completely done!". It will create a `preprocessed_data_native` directory.*
 
-### 3. Verify Dataset (Optional Baseline)
-Before committing your GPU to the intense SNN temporal simulation loop, you can verify your data extracted correctly by training a standard fast CNN on the static 2D-collapsed version of the frames.
+### Step 4: Verify the Data Pipeline (Optional Baseline)
+Before launching the heavy Spiking Neural Network, you can verify your dataset extracted perfectly by training a standard, non-spiking CNN (which crushes the time dimension perfectly into 2D imagery).
 
 ```powershell
 python train_fast_cnn.py
 ```
-*(You should see >98% accuracy hit within ~2 minutes)*.
+*(You should see >98% accuracy hit within ~2 minutes. This proves everything works!)*
 
-### 4. Train the Spiking Neural Network (CSNN)
-Once your data is available and your GPU environment is solid, launch the surrogate gradient trainer. This will iteratively unroll the CSNN $T$-times per sample, applying the Fast Sigmoid surrogate STBP logic via `snntorch` principles native PyTorch operations.
+### Step 5: Train the Convolutional Spiking Neural Network (CSNN)
+Now, train the true deep SNN. This script natively locates your NVIDIA GPU, builds the LeNet-5 architecture with `snntorch` style surrogate gradients, and unrolls the physical time dynamics ($T=20$ time steps).
 
 ```powershell
 python train.py
 ```
 
-*Note: The script natively searches for `cuda` and will automatically offload tensors to your GPU. Watch your Loss metrics!*
+Watch the training epochs and Cross-Entropy Loss print out. Your GPU is now mapping temporal spike behavior! 
