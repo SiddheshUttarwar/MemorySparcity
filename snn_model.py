@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import math
+from SRAM import SRAMWeightMemory
 
 class SurrogateFastSigmoid(torch.autograd.Function):
     """
@@ -107,6 +108,55 @@ class LeNet5_CSNN(nn.Module):
 
         # Kaiming He Initialization
         self._initialize_weights()
+
+        # Map newly initialized weights to the localized SRAM arrays
+        self._init_sram()
+
+    def _init_sram(self):
+        """Initializes physical SRAM structures mapping parametric neuron layouts."""
+        self.sram_memories = {}
+        # Conv1: 32 out, 2 in, 5x5 kernels -> [32 rows, 50 cols]
+        self.sram_memories['conv1'] = SRAMWeightMemory(rows=32, cols=2*5*5)
+        # Conv2: 64 out, 32 in, 5x5 kernels -> [64 rows, 800 cols]
+        self.sram_memories['conv2'] = SRAMWeightMemory(rows=64, cols=32*5*5)
+        # FC1: 128 out, 64*7*7 in -> [128 rows, 3136 cols]
+        self.sram_memories['fc1'] = SRAMWeightMemory(rows=128, cols=64*7*7)
+        # Output: 10 out, 128 in -> [10 rows, 128 cols]
+        self.sram_memories['fc2'] = SRAMWeightMemory(rows=10, cols=128)
+        
+        # Hydrate SRAM immediately
+        self.sync_to_sram()
+
+    def sync_to_sram(self):
+        """Writes current Pytorch weights into the static SRAM blocks."""
+        # Conv weights are detached, pushed to CPU, and flattened to standard 2D arrays
+        c1_w = self.conv1.weight.detach().cpu().numpy().reshape(32, -1)
+        self.sram_memories['conv1'].load_from_array(c1_w)
+        
+        c2_w = self.conv2.weight.detach().cpu().numpy().reshape(64, -1)
+        self.sram_memories['conv2'].load_from_array(c2_w)
+        
+        fc1_w = self.fc1.weight.detach().cpu().numpy()
+        self.sram_memories['fc1'].load_from_array(fc1_w)
+        
+        fc2_w = self.fc2.weight.detach().cpu().numpy()
+        self.sram_memories['fc2'].load_from_array(fc2_w)
+
+    def sync_from_sram(self):
+        """Fetches weights from SRAM and writes them forcefully back onto the Pytorch execution graph."""
+        device = self.conv1.weight.device
+        
+        c1_w = self.sram_memories['conv1'].export_array().reshape(32, 2, 5, 5)
+        self.conv1.weight.data.copy_(torch.tensor(c1_w, device=device, dtype=torch.float32))
+        
+        c2_w = self.sram_memories['conv2'].export_array().reshape(64, 32, 5, 5)
+        self.conv2.weight.data.copy_(torch.tensor(c2_w, device=device, dtype=torch.float32))
+        
+        fc1_w = self.sram_memories['fc1'].export_array()
+        self.fc1.weight.data.copy_(torch.tensor(fc1_w, device=device, dtype=torch.float32))
+        
+        fc2_w = self.sram_memories['fc2'].export_array()
+        self.fc2.weight.data.copy_(torch.tensor(fc2_w, device=device, dtype=torch.float32))
 
     def _initialize_weights(self):
         for m in self.modules():

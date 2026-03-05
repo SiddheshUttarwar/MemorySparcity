@@ -81,6 +81,9 @@ def train_snn():
             
             optimizer.zero_grad()
             
+            # 1. Fetch parameters physically from the SRAM arrays before simulation
+            model.sync_from_sram()
+            
             # Forward pass: model returns spike_rate (mean spikes over Time), and output_spikes [B, T, Classes]
             spike_rate, output_spikes = model(inputs)
             
@@ -88,6 +91,9 @@ def train_snn():
             loss = criterion(spike_rate, targets)
             loss.backward()
             optimizer.step()
+            
+            # 2. Write the newly updated PyTorch gradients/weights back natively into SRAM
+            model.sync_to_sram()
             
             total_loss += loss.item()
             
@@ -101,6 +107,10 @@ def train_snn():
         
         # 5. Validation Loop
         model.eval()
+        
+        # Ensure validation evaluates using the explicit SRAM memory block
+        model.sync_from_sram()
+        
         test_loss = 0
         test_correct = 0
         test_total = 0
