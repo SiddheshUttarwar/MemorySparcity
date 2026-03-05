@@ -58,8 +58,10 @@ python train_fast_cnn.py
 ### Step 5: Train the Convolutional Spiking Neural Network (CSNN)
 Now, train the true deep SNN. This script natively locates your NVIDIA GPU, builds the LeNet-5 architecture with `snntorch` style surrogate gradients, and unrolls the physical time dynamics ($T=20$ time steps).
 
+**SRAM Integration Note:** This architecture physically integrates with `SRAM.py`! Before every training iteration, the PyTorch tensors fetch their parameter weights directly from simulated `SRAMWeightMemory` blocks. During backpropagation, the PyTorch gradients are forcefully copied back into the SRAM matrices, ensuring all memory modeling behaves identically to Neuromorphic hardware.
+
 ```powershell
 python train.py
 ```
 
-Watch the training epochs and Cross-Entropy Loss print out. Your GPU is now mapping temporal spike behavior! 
+Watch the training epochs and Cross-Entropy Loss print out. Your GPU is now mapping temporal spike behavior linked directly to the SRAM blocks!
