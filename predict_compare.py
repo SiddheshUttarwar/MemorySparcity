@@ -78,6 +78,16 @@ def predict_compare():
     sparse_reads_list = []
     savings_list = []
     
+    # Advanced Statistics Tracking
+    sparse_steps_list = []
+    baseline_firing_rates = []
+    sparse_firing_rates = []
+    gatekeeper_rejections = []
+    
+    # Total internal SNN neurons (Conv1 + Conv2 + FC1 + FC2)
+    # 32x28x28 + 64x14x14 + 128 + 10 = 25088 + 12544 + 138 = 37770 neurons
+    TOTAL_NEURONS = 37770
+    
     # Track the step-wise data for one representative sample to graph
     rep_baseline_cumulative = []
     rep_sparse_cumulative = []
@@ -133,6 +143,18 @@ def predict_compare():
         saving_pct = 100 * (1.0 - (sparse_total_reads / max(1, baseline_total_reads)))
         savings_list.append(saving_pct)
         
+        # Advanced Stats
+        sparse_steps_list.append(actual_steps)
+        
+        # Firing Rate = spikes / (neurons * time_steps)
+        b_firing_rate = (internal_spikes_per_t.sum()) / (TOTAL_NEURONS * T)
+        s_firing_rate = (l1_spike_sum.item()) / (TOTAL_NEURONS * actual_steps)
+        baseline_firing_rates.append(b_firing_rate)
+        sparse_firing_rates.append(s_firing_rate)
+        
+        reject_pct = 100 * (1.0 - (hw_metrics['kept_in'] / max(1, hw_metrics['total_in'])))
+        gatekeeper_rejections.append(reject_pct)
+        
         # Save representational array for plotting
         if i == 0:
             rep_baseline_cumulative = list(baseline_cumulative)
@@ -148,26 +170,33 @@ def predict_compare():
     mean_baseline = np.mean(baseline_reads_list)
     mean_sparse = np.mean(sparse_reads_list)
     mean_savings = np.mean(savings_list)
-    max_savings = np.max(savings_list)
-    min_savings = np.min(savings_list)
-    std_savings = np.std(savings_list)
+    
+    mean_b_fire = np.mean(baseline_firing_rates) * 100 # Convert to percentage
+    mean_s_fire = np.mean(sparse_firing_rates) * 100
+    mean_gate_reject = np.mean(gatekeeper_rejections)
+    mean_sparse_t = np.mean(sparse_steps_list)
+    early_exit_count = sum(1 for steps in sparse_steps_list if steps < 20)
 
-    print(f"\nStatistical Analysis across {num_samples} Inference Targets:")
+    print(f"\nAdvanced Statistical Analysis across {num_samples} Inference Targets:")
+    print("--- 🧠 NEURAL METRICS ---")
+    print(f"  Baseline Avg Firing Rate: {mean_b_fire:.3f}% of neurons active per step")
+    print(f"  Sparse Avg Firing Rate  : {mean_s_fire:.3f}% of neurons active per step")
+    print("--- ⚡ HARDWARE METRICS ---")
+    print(f"  Avg Gatekeeper Rejection: {mean_gate_reject:.1f}% of sensory spikes dropped")
+    print(f"  Avg Inference Time (T)  : {mean_sparse_t:.1f} steps (Baseline always 20.0)")
+    print(f"  Early-Exit Frequency    : {early_exit_count}/{num_samples} inferences stopped early")
+    print("--- 💾 MEMORY FETCHES ---")
     print(f"  Avg Baseline SRAM Reads : {mean_baseline:,.0f} per inference")
     print(f"  Avg Sparse SRAM Reads   : {mean_sparse:,.0f} per inference")
-    print(f"  -------------------------------------------------------------")
-    print(f"  Mean Hardware Savings   : {mean_savings:.2f}%")
-    print(f"  Max Hardware Savings    : {max_savings:.2f}%")
-    print(f"  Min Hardware Savings    : {min_savings:.2f}%")
-    print(f"  Savings Std Deviation   : {std_savings:.2f}%")
+    print(f"  Mean Hardware Savings   : {mean_savings:.2f}% (StdDev: {np.std(savings_list):.2f}%)")
 
     # ========================================================
     # VISUALIZATION
     # ========================================================
-    plt.figure(figsize=(14, 6))
+    plt.figure(figsize=(18, 6))
 
     # Plot 1: Cumulative Reads Over Time (Representative Sample)
-    plt.subplot(1, 2, 1)
+    plt.subplot(1, 3, 1)
     t_axis = list(range(1, 21))
     plt.plot(t_axis, rep_baseline_cumulative, color='#e74c3c', linewidth=2.5, marker='x', label="Baseline CSNN")
     plt.plot(t_axis, rep_sparse_cumulative, color='#2ecc71', linewidth=2.5, marker='o', label="Sparse CSNN (Gatekeeper+Early Exit)")
@@ -178,19 +207,34 @@ def predict_compare():
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.legend()
 
-    # Plot 2: Average Reads Bar Chart
-    plt.subplot(1, 2, 2)
-    categories = ['Baseline SNN', 'Opt. Sparse SNN']
-    values = [mean_baseline, mean_sparse]
-    colors = ['#e74c3c', '#2ecc71']
+    # Plot 2: Average Firing Rate Comparison
+    plt.subplot(1, 3, 2)
+    categories = ['Baseline SNN', 'Sparse SNN']
+    fire_values = [mean_b_fire, mean_s_fire]
+    colors_fire = ['#9b59b6', '#3498db']
     
-    bars = plt.bar(categories, values, color=colors, alpha=0.9, width=0.5)
+    bars2 = plt.bar(categories, fire_values, color=colors_fire, alpha=0.9, width=0.5)
+    plt.title(f"Mean Neuronal Firing Rate", fontsize=12)
+    plt.ylabel("% of Neurons Active per Time Step", fontsize=11)
+    plt.grid(axis='y', linestyle='--', alpha=0.5)
+    
+    for bar in bars2:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2, yval + (max(fire_values)*0.02), f'{yval:.3f}%', ha='center', va='bottom', fontweight='bold')
+
+    # Plot 3: Average Reads Bar Chart
+    plt.subplot(1, 3, 3)
+    values = [mean_baseline, mean_sparse]
+    colors_reads = ['#e74c3c', '#2ecc71']
+    
+    # Plot 3: Average Reads Bar Chart
+    bars3 = plt.bar(categories, values, color=colors_reads, alpha=0.9, width=0.5)
     plt.title(f"Average Hardware Cost ({num_samples} Samples)", fontsize=12)
     plt.ylabel("Average SRAM Reads per Inference", fontsize=11)
     plt.grid(axis='y', linestyle='--', alpha=0.5)
     
     # Add text labels on bars
-    for bar in bars:
+    for bar in bars3:
         yval = bar.get_height()
         plt.text(bar.get_x() + bar.get_width()/2, yval + (max(values)*0.02), f'{int(yval):,}', ha='center', va='bottom', fontweight='bold')
 
