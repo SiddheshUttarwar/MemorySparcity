@@ -66,14 +66,14 @@ S(t) =
 0 & \text{otherwise}
 \end{cases}
 \end{equation}
-Upon firing, the membrane strictly executes a soft-reset by subtracting the threshold voltage to prevent information loss.
+Upon firing, the membrane strictly executes a soft-reset by subtracting the threshold voltage to prevent information loss. In our physical implementation, the LIF neurons were configured with a leakage constant of $\beta=0.9$ and a normalized baseline threshold of $V_{th}=1.0$.
 
 \subsection{Surrogate Gradient Backpropagation}
 Because the derivative of the step function $S(t)$ is zero everywhere except the origin (where it is non-differentiable Dirac delta), standard Backpropagation Through Time (BPTT) fails. To solve the credit-assignment mechanism, we apply a Fast Sigmoid surrogate gradient during the backward pass \cite{zenke2021remarkable}:
 \begin{equation}
 \frac{\partial S}{\partial V} = \frac{1}{(1 + \alpha |V - V_{th}|)^2}
 \end{equation}
-This allows gradients to gracefully propagate back through the threshold operators to tune the convolutional filters against a standard Cross-Entropy loss applied to the total spike output rate.
+This allows gradients to gracefully propagate back through the threshold operators to tune the convolutional filters against a standard Cross-Entropy loss applied to the total spike output rate. The surrogate gradient slope was empirically scaled with $\alpha=2.0$ to ensure stable derivative propagation across the $T=20$ integration span.
 
 \begin{figure}[htbp]
 \centerline{\includegraphics[width=\linewidth]{sparse_snn_architecture.png}}
@@ -81,9 +81,9 @@ This allows gradients to gracefully propagate back through the threshold operato
 \label{fig:architecture}
 \end{figure}
 
-\section{Sparsity-Optimized Hardware Routing}
+\section{Sparsity-Optimized Hardware Routing and Digital Blocks}
 
-The true energy sink of a Neuromorphic accelerator lies in SRAM memory fetching ($E_{read}$). Fetching an 8-bit weight from localized memory requires orders of magnitude more Picojoules than executing the 8-bit addition itself. Therefore, a sparsity-optimized architecture must prioritize limiting bus requests.
+The true energy sink of a Neuromorphic accelerator lies in SRAM memory fetching ($E_{read}$). Fetching an 8-bit weight from localized memory requires orders of magnitude more Picojoules than executing the 8-bit addition itself. Therefore, a sparsity-optimized architecture must prioritize limiting bus requests. To validate these concepts physically alongside PyTorch, the algorithmic optimizations were explicitly mapped to behavioral Verilog RTL, comprising Quantized 8-bit SRAM modules, Sparse MAC Arrays (bypassing logic strictly when chip-enable drops), Adaptive LIF logic cores, and an Early-Exit Finite State Machine.
 
 \subsection{Dynamic Gatekeeper Framework}
 To physically realize event-driven energy savings, a conceptual ``Dynamic Gatekeeper'' array was positioned between the raw input buffer and the primary Conv1 execution cores. The Gatekeeper utilizes two specialized filters to intercept incoming signals.
@@ -134,13 +134,37 @@ The baseline architecture and the highly constrained Sparse-Optimized architectu
 \subsection{Saptio-Temporal Classification Robustness}
 SNNs operating via pure Rate Coding typically suffer accuracy collapse when internal network sparsity is forcibly optimized. However, our architecture retained remarkable predictive retention. The conventional Dense CSNN Baseline achieved a maximum classification Test Accuracy of $92.10\%$. Uniquely, the fully configured Sparse-Architecture reached terminal Test Accuracy of $91.83\%$. This marginal $0.27\%$ deficit proves that aggressive input gating and threshold scaling strip localized noise rather than critical geometric event boundaries.
 
-\subsection{Physical Efficiency Benchmarks}
-As visualized in the execution metrics hook arrays, over an isolated batch of 100 validation candidates, the true SRAM advantage of our network paradigm was definitively realized.
+\subsection{Physical Efficiency Benchmarks and Cumulative Reads}
+As visualized in the execution metrics hook arrays, over an isolated batch of 100 validation candidates, the true SRAM advantage of our network paradigm was definitively realized. Table \ref{tab:comparison} formalizes the absolute hardware metric discrepancies recorded natively during the quantitative prediction phase.
+
+\begin{table}[htbp]
+\caption{Hardware Benchmark Comparison (100 Samples)}
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Metric} & \textbf{Baseline Dense CSNN} & \textbf{Sparse Architecture} \\
+\hline
+\textbf{Test Accuracy (\%)} & 92.10\% & 91.83\% \\
+\hline
+\textbf{Avg. Execution Steps} & 20.0 (Fixed) & 5.8 (Dynamic) \\
+\hline
+\textbf{Gatekeeper Rejection} & 0\% (All Fetched) & 30.5\% (Dropped) \\
+\hline
+\textbf{Mean Firing Rate (\%)} & 3.21\% & 0.78\% \\
+\hline
+\textbf{Avg. SRAM Fetches} & $\sim$172,000 & $\sim$52,000 \\
+\hline
+\textbf{SRAM Efficiency} & 1.00$\times$ Base & \textbf{3.30$\times$ Lower Power} \\
+\hline
+\end{tabular}
+\label{tab:comparison}
+\end{center}
+\end{table}
 
 \begin{itemize}
     \item \textbf{Gatekeeper Rejection:} The dual Spatial/Burst logic arrays intercepted and permanently halted $30.5\%$ of the environmental N-MNIST incoming spikes prior to Conv1 integration.
-    \item \textbf{Firing Rate Degradation:} Applying the Adaptive Threshold modification, the total system-wide activation density stabilized at $0.781\%$ of neurons active per execution step, massively outperforming the uncontrolled dense framework ($3.21\%$).
-    \item \textbf{Temporal Termination:} Our theoretical framework constrained evaluations to $T=20$ integration steps. Driven by the Early Exit Finite State Machine, 100\% of Sparse inferences breached terminal confidence margins strictly between $T=4$ and $T=7$.
+    \item \textbf{Firing Rate Degradation:} Applying the Adaptive Threshold modification, the total system-wide activation density stabilized at precisely $0.781\%$ of neurons active per execution step, massively outperforming the uncontrolled dense framework ($3.21\%$).
+    \item \textbf{Cumulative Temporal Fetches:} Our theoretical framework constrained evaluations to $T=20$ integration steps. Driven by the Early Exit Finite State Machine, $100\%$ of Sparse inferences breached terminal confidence margins strictly between $T=4$ and $T=7$. This is mathematically evidenced by Figure \ref{fig:cumulative}, where the cumulative memory reads entirely flatline early in the temporal cycle, halting all localized memory operations instantly.
 \end{itemize}
 
 \begin{figure}[htbp]
