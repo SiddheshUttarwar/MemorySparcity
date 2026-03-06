@@ -18,13 +18,13 @@ You need an isolated Python environment with NVIDIA CUDA capabilities to execute
 
 ```powershell
 # 1. Create a native isolated virtual environment
-python -m venv venv
+python -m venv .venv
 
 # 2. Bypass Windows App Execution limits so you can activate the environment
 Set-ExecutionPolicy -ExecutionPolicy UNRESTRICTED -Scope CurrentUser
 
 # 3. Activate the virtual environment! (You must do this every time you open a new terminal)
-.\venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 
 # 4. Give pip an upgrade
 python -m pip install --upgrade pip
