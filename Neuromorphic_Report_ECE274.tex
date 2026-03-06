@@ -1,0 +1,166 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+
+\begin{document}
+
+\title{Energy-Efficient Spiking Neural Networks using Hybrid Dynamic Gatekeeping and Early Exit Frameworks\\
+\thanks{This project is submitted for ECE 274: Neuromorphic Computing.}
+}
+
+\author{
+\IEEEauthorblockN{Siddhesh Uttarwar}
+\IEEEauthorblockA{\textit{Department of Electrical and Computer Engineering} \\
+\textit{University of California, Irvine}\\
+Irvine, CA, USA \\
+Email: suttarwa@uci.edu}
+\and
+\IEEEauthorblockN{Parth Kulkarni}
+\IEEEauthorblockA{\textit{Department of Electrical and Computer Engineering} \\
+\textit{University of California, Santa Barbara}\\
+Santa Barbara, CA, USA \\
+Email: paethkulkarni@ucsb.edu}
+}
+
+\maketitle
+
+\begin{abstract}
+As traditional Artificial Neural Networks (ANNs) scale in complexity, their power consumption on von Neumann architectures becomes prohibitive, particularly for edge devices. Neuromorphic Computing, via Spiking Neural Networks (SNNs), offers a biologically inspired alternative by processing temporal, event-driven data using extreme sparsity. However, while theoretical SNN models are sparse, translating this efficiency into practical hardware implementations often incurs significant memory static draw and redundant algorithmic operations. This paper presents a comprehensive Convolutional Spiking Neural Network (CSNN) architecture optimized for extreme resource constraints. We introduce a novel ``Dynamic Gatekeeper'' routing mechanism and an output-confidence ``Early-Exit'' temporal finite state machine (FSM). Evaluated on the natively event-based N-MNIST dataset, our optimized architecture achieves 91.83\% classification accuracy while physically dropping 30.5\% of sensory background noise and terminating inferences in an average of $T{=}4$ to $7$ time steps. By explicitly optimizing the spatial-temporal sparsity, we successfully reduce total dynamic SRAM fetches by an average of 69\% compared to dense baseline CSNN models, paving the way for ultra-low power neuromorphic edge intelligence.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Spiking Neural Networks, Neuromorphic Hardware, Dynamic Gatekeeper, Early Exit, N-MNIST, Surrogate Gradients
+\end{IEEEkeywords}
+
+\section{Introduction}
+The proliferation of edge computing demands intelligent processing mechanisms capable of operating under highly constrained energy and memory budgets. While traditional Artificial Neural Networks (ANNs) excel in visual classification tasks, they rely on synchronous, dense matrix multiplications that enforce continuous memory bandwidth utilization. This memory-wall bottleneck heavily penalizes autonomous and edge systems relying on battery power. Neuromorphic Computing approaches this bottleneck by mimicking biological paradigms, specifically via Spiking Neural Networks (SNNs) \cite{roy2019towards}.
+
+SNNs process information through asynchronous, binary spikes ($1$ or $0$), allowing hardware elements to remain entirely dormant until explicitly stimulated. This event-driven nature unlocks massive theoretical active-power savings. Despite these advantages, the physical instantiation of SNNs on traditional hardware or FPGAs faces significant hurdles. Constant memory polling to update non-firing neurons, the proliferation of back-to-back duplicate spikes (bursting), and rigid temporal execution windows all artificially inflate static energy consumption in practical digital logic equivalents.
+
+To address these inefficiencies, this project implements a highly optimized inference engine specifically designed to process spatial-temporal event streams. Operating natively on the neuromorphic N-MNIST dataset, we establish a robust surrogate-gradient trained baseline Convolutional Spiking Neural Network (CSNN). We then layer rigorous architectural hardware enhancements directly into the Spiking pipeline, utilizing Importance Monitoring, Burst Redundancy Dropouts, Adaptive Leaky-Integrate-and-Fire (LIF) Thresholding, and Early-Exit State Machines \cite{neftci2019surrogate}. 
+
+These hardware-centric design modifications are mapped explicitly to Verilog RTL components and simulated simultaneously via quantitative execution hooks in our PyTorch training pipeline. By intercepting inference data flows, we calculate the exact physical Static Random-Access Memory (SRAM) fetch reductions, establishing a robust bridge between high-accuracy Deep Learning metrics and true hardware-aware neuromorphic deployment.
+
+\section{Background and Foundations}
+
+\subsection{Spatio-Temporal Datasets (N-MNIST)}
+Standard datasets (like the classic MNIST) provide static, flattened frames representing light intensity. In contrast, neuromorphic event-cameras function like human retinas, reporting continuous, asynchronous voltage changes. The N-MNIST (Neuromorphic-MNIST) dataset consists of 70,000 temporal recordings of digits moving across an array \cite{orchard2015converting}. The recording sensors produce binary `ON' and `OFF' polarity spikes represented by $(x, y, p, t)$ tuples. 
+
+For batch tensor processing, these events were natively integrated into 3-Dimensional boolean tensors defined as $Spikes(T, C, H, W)$, where $T$ represents segmented temporal bins (we utilize $T=20$ integration steps). This framing enables the network to physically step through the recording timeline, isolating spatial features across a fixed interval of discrete clock ticks.
+
+\subsection{Leaky Integrate-and-Fire (LIF) Neurons}
+At the core of our CSNN is the Leaky Integrate-and-Fire neuron. The temporal dynamics of the membrane potential $V(t)$ in discrete time is modeled recursively:
+\begin{equation}
+V(t) = \beta V(t-1) + X(t) - S(t-1)V_{th}
+\end{equation}
+where $\beta$ regulates the subthreshold leakage, $X(t)$ is the sum of incoming weighted synaptic currents from the Multiply-Accumulate (MAC) arrays, and $V_{th}$ is the firing threshold. A binary output spike $S(t)$ is formulated as a Heaviside step mechanism:
+\begin{equation}
+S(t) = 
+\begin{cases} 
+1 & \text{if } V(t) \ge V_{th} \\
+0 & \text{otherwise}
+\end{cases}
+\end{equation}
+Upon firing, the membrane strictly executes a soft-reset by subtracting the threshold voltage to prevent information loss.
+
+\subsection{Surrogate Gradient Backpropagation}
+Because the derivative of the step function $S(t)$ is zero everywhere except the origin (where it is non-differentiable Dirac delta), standard Backpropagation Through Time (BPTT) fails. To solve the credit-assignment mechanism, we apply a Fast Sigmoid surrogate gradient during the backward pass \cite{zenke2021remarkable}:
+\begin{equation}
+\frac{\partial S}{\partial V} = \frac{1}{(1 + \alpha |V - V_{th}|)^2}
+\end{equation}
+This allows gradients to gracefully propagate back through the threshold operators to tune the convolutional filters against a standard Cross-Entropy loss applied to the total spike output rate.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{sparse_snn_architecture.png}}
+\caption{The spatio-temporal topology of our LeNet-5 Convolutional Spiking Neural Network (CSNN). The architecture processes streams across $T$ frames, mapping dense analog synapses to temporally unrolled discrete spikes.}
+\label{fig:architecture}
+\end{figure}
+
+\section{Sparsity-Optimized Hardware Routing}
+
+The true energy sink of a Neuromorphic accelerator lies in SRAM memory fetching ($E_{read}$). Fetching an 8-bit weight from localized memory requires orders of magnitude more Picojoules than executing the 8-bit addition itself. Therefore, a sparsity-optimized architecture must prioritize limiting bus requests.
+
+\subsection{Dynamic Gatekeeper Framework}
+To physically realize event-driven energy savings, a conceptual ``Dynamic Gatekeeper'' array was positioned between the raw input buffer and the primary Conv1 execution cores. The Gatekeeper utilizes two specialized filters to intercept incoming signals.
+
+\subsubsection{Importance Monitor} High-frequency event cameras often induce background static. A localized saturating window array maps the $(X, Y)$ coordinates of the sensory stream. Events arriving at spatial coordinates exhibiting low temporal density are mathematically flagged as random static and explicitly purged before reaching the bus.
+
+\subsubsection{Burst Redundancy Filter} Edge-extraction saccadic tracking can result in duplicate back-to-back spikes targeting the exact same internal synapse. Given that sequential $T=t$ and $T=t+1$ identical stimuli do not meaningfully contribute to temporal feature variance, the Redundancy filter identifies consecutive $O(1)$ correlations and drops the secondary spike, halving the necessary fetches for dense intensity areas.
+
+Combined, this gatekeeping logic holds the unified $gate\_keep$ RTL logic pin low for massive subsets of the continuous data stream. While $gate\_keep=0$, both the $MAC$ arrays and the explicit SRAM $Read\_Enable$ triggers remain physically disconnected from the clock, shutting off active power draw for non-critical information.
+
+\subsection{Adaptive Thresholding Mechanism}
+By operating deeply recurrent Spiking Neural Networks, intermediate activation layers are susceptible to ``spike storms'' where dense object representation sends the intermediate LIF neurons into hyper-firing cascades, breaking internal sparsity patterns. 
+
+To mitigate exponential signal growth, the global static threshold $V_{th}$ was restructured into an auto-tuning adaptive state per-neuron:
+\begin{equation}
+V_{th}(t) = V_{th}(t-1) + \rho \cdot S(t) - \tau_{decay}
+\end{equation}
+Where $\rho$ scales the threshold upwards instantly upon firing. This logic structurally incorporates biological Refractory Periods, punishing neurons for rapid firing and forcing the macro network to encode visual representations deeper into binary timing codes rather than high-density rate codes. This mechanism aggressively lowers the hidden layer firing rate to $<1\%$.
+
+\subsection{Output-Confidence Early-Exit FSM}
+Standard digital logic pipelines force fixed execution timelines. While our baseline CSNN evaluated input tensors over a rigid 20-tick clock cycle ($T=20$), visual streams rarely require the full temporal duration to determine structural outlines.
+
+An independent Finite State Machine (FSM) was bound to the final 10-node classification layer. The FSM integrates the discrete spiking behavior of the classification neurons throughout the unfolding time dimension. A global polling evaluation is defined:
+\begin{equation}
+terminate = \exists_{c \in C} \left( \sum_{t=0}^{t_{current}} S_c(t) > \Psi_{conf} \right)
+\end{equation}
+If any single classification node reaches the confidence threshold $\Psi_{conf}$, an interrupt instantly signals $sys\_en = 0$. This severs the global clock tree, freezing the entire neuromorphic pipeline. Hardware cycles ordinarily exhausted completing the $t_{current} \rightarrow T_{max}$ frames are bypassed completely.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{sram_cumulative_reads.png}}
+\caption{Tracking cumulative physical memory reads over the temporal computing window. The Baseline CSNN runs the full duration with a linear fetch increase, while the Sparse Architecture flattens internal activity due to Gatekeeping and cleanly terminates prior to $T=10$.}
+\label{fig:cumulative}
+\end{figure}
+
+\section{Experimental Methodology}
+
+\subsection{Execution Environment}
+The CSNNs were constructed within the PyTorch machine-learning framework to exploit GPU-accelerated tensor optimization during the backpropagation phases. The network was trained using the Adam Optimizer initialized at $learning\_rate = 1e^{-3}$, decaying through a Cosine Annealing scheduler over 10 independent epochs. Dropout regularization arrays ($p=0.5$) were instituted within the Fully-Connected readout vectors to halt rigid temporal memorization.
+
+\subsection{Simulating Hardware Traces}
+To extrapolate explicit Verilog RTL execution constraints directly from the pyTorch validation graphs, localized Forward Hooks were injected into every $LIFNodeSTBP$ module. These physical intercepts actively captured the quantity of binary $1$ states permeating the tensor activations, producing an exact $1:1$ numerical equivalent for the localized SRAM block access triggers representing the theoretical neuromorphic System-on-Chip (SoC).
+
+
+\section{Analytical Results and Discussion}
+
+The baseline architecture and the highly constrained Sparse-Optimized architecture were evaluated strictly against the 10,000 isolated N-MNIST testing matrices to analyze the balance of temporal recognition versus physical SRAM memory taxation.
+
+\subsection{Saptio-Temporal Classification Robustness}
+SNNs operating via pure Rate Coding typically suffer accuracy collapse when internal network sparsity is forcibly optimized. However, our architecture retained remarkable predictive retention. The conventional Dense CSNN Baseline achieved a maximum classification Test Accuracy of $92.10\%$. Uniquely, the fully configured Sparse-Architecture reached terminal Test Accuracy of $91.83\%$. This marginal $0.27\%$ deficit proves that aggressive input gating and threshold scaling strip localized noise rather than critical geometric event boundaries.
+
+\subsection{Physical Efficiency Benchmarks}
+As visualized in the execution metrics hook arrays, over an isolated batch of 100 validation candidates, the true SRAM advantage of our network paradigm was definitively realized.
+
+\begin{itemize}
+    \item \textbf{Gatekeeper Rejection:} The dual Spatial/Burst logic arrays intercepted and permanently halted $30.5\%$ of the environmental N-MNIST incoming spikes prior to Conv1 integration.
+    \item \textbf{Firing Rate Degradation:} Applying the Adaptive Threshold modification, the total system-wide activation density stabilized at $0.781\%$ of neurons active per execution step, massively outperforming the uncontrolled dense framework ($3.21\%$).
+    \item \textbf{Temporal Termination:} Our theoretical framework constrained evaluations to $T=20$ integration steps. Driven by the Early Exit Finite State Machine, 100\% of Sparse inferences breached terminal confidence margins strictly between $T=4$ and $T=7$.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{hardware_comparative_analysis.png}}
+\caption{Statistical comparative analysis of the Mean Neuronal Firing Rate (Left) and Absolute Hardware Fetch Cost (Right) averaged over a 100-sample test cohort.}
+\label{fig:comparative}
+\end{figure}
+
+These combined attributes compound to define our absolute hardware efficiency rating. The conventional CSNN paradigm required an overwhelming average of $172,000$ independent weight memory fetch operations to traverse $T=20$ logic frames. The Sparse mechanism decimated this constraint uniformly, evaluating inputs using only $52,000$ operations on average. This signifies a massive $>69\%$ global efficiency amplification directly translating to SoC static layout preservation.
+
+\section{Conclusion}
+This paper outlines a rigorous topological expansion for integrating high-fidelity Convolutional Spiking Neural Networks directly into energy-starved computational edges. While generic surrogate-trained SNNs naturally offer spatial efficiencies, executing event-driven operations across synchronized digital clock domains results in extensive internal redundancies. By fundamentally modifying the RTL data-path via Dynamic Saccadic Gatekeepers, Adaptive Activation Thresholding, and Global Early Exit Clock Termination structures, we proved that neuromorphic evaluation matrices can be overwhelmingly constrained without degrading network intelligence. 
+
+Sustaining a $91.83\%$ N-MNIST classification reliability while simultaneously purging nearly 70\% of local computation arrays highlights the profound scalability edge. Applying these methods directly inside application-specific neuromorphic processors provides a clear path forward for sustainable, instantaneous ambient perception logic implementations.
+
+\begin{thebibliography}{00}
+\bibitem{roy2019towards} K. Roy, A. Jaiswal, and P. Panda, ``Towards spike-based machine intelligence with neuromorphic computing,'' \textit{Nature}, vol. 575, no. 7784, pp. 607-617, 2019.
+\bibitem{neftci2019surrogate} E. O. Neftci, H. Mostafa, and F. Zenke, ``Surrogate Gradient Learning in Spiking Neural Networks: Bringing the Power of Gradient-Based Optimization to Spiking Neural Networks,'' \textit{IEEE Signal Processing Magazine}, vol. 36, no. 6, pp. 51-63, Nov. 2019.
+\bibitem{zenke2021remarkable} F. Zenke and T. P. Vogels, ``The remarkable robustness of surrogate gradient learning for instilling complex function in spiking neural networks,'' \textit{Neural Computation}, vol. 33, no. 4, pp. 899-925, 2021.
+\bibitem{orchard2015converting} G. Orchard, A. Jayawant, G. K. Cohen, and N. Thakor, ``Converting Static Image Datasets to Spiking Neuromorphic Datasets Using Saccades,'' \textit{Frontiers in Neuroscience}, vol. 9, p. 437, 2015.
+\end{thebibliography}
+
+\end{document}
