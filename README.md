@@ -65,3 +65,18 @@ python train.py
 ```
 
 Watch the training epochs and Cross-Entropy Loss print out. Your GPU is now mapping temporal spike behavior linked directly to the SRAM blocks!
+
+### Step 6: Train the Sparsity-Optimized SNN (Sparse-SNN)
+To optimize for hardware constraints and maximize the **Accuracy-per-Spike** ratio (SRAM Efficiency), we've implemented a specialized Sparse architecture (`sparse_snn_model.py` and `train_sparse.py`).
+
+This custom network includes:
+- **L1 Activity Regularization:** Mathematically penalizes the network for firing too many spikes, forcing it to learn MNIST in the most minimalist way possible.
+- **Adaptive Thresholding:** Neurons dynamically raise their voltage thresholds after firing to suppress "Spike Storms."
+- **Temporal Early-Exit:** Instead of running the full $T=20$ simulation loop blindly, the forward pass will short-circuit and break early if the classification layer reaches a high confidence state (e.g. distinguishing a digit unambiguously in 4 steps).
+- **INT8 Weight Quantization:** Before floating-point weights are synced to the `SRAMWeightMemory` module, they are clamped into an 8-bit scale (`-127` to `127`).
+
+To test this high-efficiency hardware model natively, simply run:
+```powershell
+python train_sparse.py
+```
+*Note: The terminal will now actively output `T-Avg` (average steps taken due to Early Exit) and `SRAM Eff` (Accuracy / Total Spikes).*
