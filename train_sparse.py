@@ -1,9 +1,11 @@
 import os
 import torch
 import torch.nn as nn
+try:
+    from torchinfo import summary
+except ImportError:
+    summary = None
 from torch.utils.data import DataLoader
-from train import NMNISTDataset
-from sparse_snn_model import LeNet5_Sparse_CSNN
 import time
 
 def train_sparse():
@@ -22,12 +24,22 @@ def train_sparse():
 
     # Initialize Sparse Model
     model = LeNet5_Sparse_CSNN(in_channels=2, num_classes=10).to(DEVICE)
+    
+    # Optional Visualization
+    if summary is not None:
+        print("\n--- Model Architecture Visualization ---")
+        # Dummy input for torchinfo (Batch, Time, Channels, Height, Width)
+        summary(model, input_size=(1, 20, 2, 34, 34), device=DEVICE)
+        print("--------------------------------------\n")
 
-    epochs = 5
-    lr = 1e-3
+    epochs = 10 # Increased to 10 for better convergence
+    lr = 2e-3   # Slightly higher initial LR
     lambda_reg = 1e-7 # Reduced from 1e-5 to prevent Total Spike Death
     
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    # Cosine Annealing Learning Rate Scheduler for late-stage accuracy squeezing
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    
     criterion = nn.CrossEntropyLoss()
 
     print("\n--- Starting SPARSE CSNN Training (STBP) ---")
@@ -42,6 +54,9 @@ def train_sparse():
         epoch_hw_mac = 0
         epoch_hw_in = 0
         epoch_hw_kept = 0
+        
+        # Best model tracking
+        best_val_acc = 0.0
         
         for batch_idx, (inputs, targets) in enumerate(train_loader):
             inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
@@ -111,13 +126,24 @@ def train_sparse():
         
         gate_sparsity = 100. * (epoch_hw_kept / (epoch_hw_in + 1e-9))
         
-        print(f"\nEpoch [{epoch+1}/{epochs}]")
+        # Step the learning rate scheduler
+        scheduler.step()
+        
+        print(f"\nEpoch [{epoch+1}/{epochs}] | LR: {scheduler.get_last_lr()[0]:.6f}")
         print(f"  Train -> Loss: {train_loss:.4f} | Acc: {train_acc:.2f}% | T-Avg: {avg_t:.1f} steps | SRAM Eff: {sram_efficiency:.4f}")
         print(f"  Test  -> Loss: {val_loss:.4f} | Acc: {val_acc:.2f}% | T-Avg: {val_avg_t:.1f} steps | SRAM Eff: {val_sram_efficiency:.4f}")
         print(f"  Spikes-> Train Total: {total_network_spikes:,.0f} | Val Total: {val_network_spikes:,.0f}")
         print(f"  HW Sim-> Input Gate Kept: {gate_sparsity:.1f}% ({epoch_hw_kept:,.0f}/{epoch_hw_in:,.0f}) | CS_asserts: {epoch_hw_cs:,.0f} | MAC_ops: {epoch_hw_mac:,.0f}")
 
+        # Checkpoint the Best Model
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            print(f"  => [Saving Checkoutpoint]: New Best Accuracy {best_val_acc:.2f}%")
+            torch.save(model.state_dict(), "best_sparse_model.pth")
+
     print(f"\nSparse Training Completed in {time.time() - start_time_global:.2f} seconds!")
+    print(f"Best Validation Accuracy achieved: {best_val_acc:.2f}%")
+    print(f"Model saved to: best_sparse_model.pth")
 
 if __name__ == "__main__":
     train_sparse()

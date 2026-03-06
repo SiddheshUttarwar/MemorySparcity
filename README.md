@@ -22,8 +22,14 @@ Since training Spiking Neural Networks on CPU can take days, you can run this en
 # 3. Preprocess the 70,000 spikes (using Colab's Linux processors)
 !python preprocess_dataset.py
 
-# 4. Blast the fully-fledged Sparsity-Optimized SNN on the NVIDIA GPU!
+# 4. Install Visualization Hooks
+!pip install -q torchinfo torchviz graphviz
+
+# 5. Blast the fully-fledged Sparsity-Optimized SNN on the NVIDIA GPU!
 !python train_sparse.py
+
+# 6. Render the Architecture Diagrams
+!python visualize_model.py
 ```
 *(If you do not see `Train.zip` and `Test.zip` in your repo yet, simply drag and drop them from your computer into the left-hand folder menu inside Colab before running the `!unzip` commands.)*
 
