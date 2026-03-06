@@ -47,6 +47,9 @@ def train_sparse():
     print("\n--- Starting SPARSE CSNN Training (STBP) ---")
     start_time_global = time.time()
     
+    # Global Best model tracking across all epochs
+    best_val_acc = 0.0
+    
     for epoch in range(epochs):
         model.train()
         total_loss, correct, total = 0, 0, 0
@@ -56,9 +59,6 @@ def train_sparse():
         epoch_hw_mac = 0
         epoch_hw_in = 0
         epoch_hw_kept = 0
-        
-        # Best model tracking
-        best_val_acc = 0.0
         
         for batch_idx, (inputs, targets) in enumerate(train_loader):
             inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)

@@ -69,6 +69,10 @@ class LeNet5_Sparse_CSNN(nn.Module):
         self.pool2 = nn.AvgPool2d(2, 2)
 
         self.flatten = nn.Flatten()
+        
+        # Dropout to combat the specific Overfitting observed during training
+        self.dropout = nn.Dropout(0.5) 
+        
         self.fc1 = nn.Linear(64 * 7 * 7, 128, bias=False)
         self.lif3 = LIFNodeSTBP_Sparse(beta=self.beta, v_threshold=self.v_th, rho=self.rho)
         
@@ -206,6 +210,9 @@ class LeNet5_Sparse_CSNN(nn.Module):
             x_t = self.pool2(spike2)
             
             x_t = self.flatten(x_t)
+            
+            # Apply dropout during training to randomly kill 50% of signals!
+            x_t = self.dropout(x_t)
             
             x_t = self.fc1(x_t)
             spike3, v3, v_th3 = self.lif3(x_t, v3, v_th3)
