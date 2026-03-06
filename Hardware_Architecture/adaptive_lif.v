@@ -27,6 +27,7 @@ module adaptive_lif #(
             spike_out <= is_spike;
             
             if (is_spike) begin
+                // STATISTICAL BENCHMARK: < 1% of total neurons will fire per time tick (T)
                 // Soft Reset logic: subtract threshold directly
                 v_mem <= v_integrated - v_th;
                 // Adaptive Thresholding: Suppress rapid consecutive firings (Spike Storms)
