@@ -48,10 +48,30 @@ These hardware-centric design modifications are mapped explicitly to Verilog RTL
 
 \section{Background and Foundations}
 
-\subsection{Spatio-Temporal Datasets (N-MNIST)}
-Standard datasets (like the classic MNIST) provide static, flattened frames representing light intensity. In contrast, neuromorphic event-cameras function like human retinas, reporting continuous, asynchronous voltage changes. The N-MNIST (Neuromorphic-MNIST) dataset consists of 70,000 temporal recordings of digits moving across an array \cite{orchard2015converting}. The recording sensors produce binary `ON' and `OFF' polarity spikes represented by $(x, y, p, t)$ tuples. 
+\section{Data Preprocessing and Spatio-Temporal Extraction}
 
-For batch tensor processing, these events were natively integrated into 3-Dimensional boolean tensors defined as $Spikes(T, C, H, W)$, where $T$ represents segmented temporal bins (we utilize $T=20$ integration steps). This framing enables the network to physically step through the recording timeline, isolating spatial features across a fixed interval of discrete clock ticks.
+\subsection{Address-Event Representation (AER)}
+Standard datasets (like the classic MNIST) provide static, flattened frames representing light intensity. In contrast, neuromorphic event-cameras function like human retinas, reporting continuous, asynchronous voltage changes. The N-MNIST (Neuromorphic-MNIST) dataset consists of 70,000 temporal recordings of digits moving across a Field of View (FOV) \cite{orchard2015converting}. The recording sensors do not capture frames; instead, they produce an asynchronous stream of binary `ON' and `OFF' polarity spikes represented by $(x, y, p, t)$ tuples natively encoded in binary `.bin` files. 
+
+\subsection{Spatial Cropping and Alignment}
+The raw N-MNIST spike camera resolves a $34\times34$ visual matrix. To properly align the spatial vectors with standardized LeNet-5 computer vision architectures, the raw coordinate data was spatially centered and rigidly cropped down to a standard $28\times28$ dimensionality grid. Spikes falling outside the $x \in [3, 31], y \in [3, 31]$ bounding box were discarded to strip peripheral noise.
+
+\subsection{Boolean Spike Tensor Binning}
+To prepare the asynchronous event stream for synchronized GPU batch processing, the continuous $300 ms$ timeline of each recording was sliced iteratively into $T=20$ isometric integration frames (spanning $15 ms$ each). True event polarity was merged into a unipolar spatial envelope to simplify input dynamics.
+
+This extraction integrates the raw $(x, y, p, t)$ events into 3-Dimensional boolean tensors defined as $Spikes(T, C, H, W)$ where $T=20$, $C=1$, $H=28$, and $W=28$, as visualized in Figure \ref{fig:preprocessing}. This structural framing enables the internal neural layers to physically step through the recording timeline sequentially, explicitly isolating spatial features across a fixed interval of discrete clock ticks.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{plots/preprocessing_pipeline.png}}
+\caption{Visualized preprocessing pipeline converting raw spatial ON/OFF polarity events into structured 2D spatial maps for digit recognition.}
+\label{fig:preprocessing}
+\end{figure}
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{plots/digit_0_raster.png}}
+\caption{Spike raster plot illustrating the temporal density of N-MNIST events over time. The asynchronous stimulus is structured into T=20 discrete bins.}
+\label{fig:raster}
+\end{figure}
 
 \subsection{Leaky Integrate-and-Fire (LIF) Neurons}
 At the core of our CSNN is the Leaky Integrate-and-Fire neuron. The temporal dynamics of the membrane potential $V(t)$ in discrete time is modeled recursively:
