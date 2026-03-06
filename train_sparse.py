@@ -25,7 +25,7 @@ def train_sparse():
 
     epochs = 5
     lr = 1e-3
-    lambda_reg = 1e-5 # L1 Spike Penalty Weight
+    lambda_reg = 1e-7 # Reduced from 1e-5 to prevent Total Spike Death
     
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss()
@@ -75,7 +75,11 @@ def train_sparse():
             
         train_acc = 100. * correct / total
         train_loss = total_loss / len(train_loader)
-        sram_efficiency = train_acc / (total_network_spikes / total + 1e-9)
+        
+        # Calculate how many spikes were fired PER INFERENCE on average
+        spikes_per_inference_train = total_network_spikes / total
+        # SRAM efficiency: accuracy points per 1000 spikes (scaled for readability)
+        sram_efficiency = train_acc / (spikes_per_inference_train / 1000.0 + 1e-9)
         avg_t = total_time_steps / len(train_loader)
         
         # Validation
@@ -101,7 +105,8 @@ def train_sparse():
                 
         val_acc = 100. * test_correct / test_total
         val_loss = test_loss / len(test_loader)
-        val_sram_efficiency = val_acc / (val_network_spikes / test_total + 1e-9)
+        spikes_per_inference_val = val_network_spikes / test_total
+        val_sram_efficiency = val_acc / (spikes_per_inference_val / 1000.0 + 1e-9)
         val_avg_t = val_time_steps / len(test_loader)
         
         gate_sparsity = 100. * (epoch_hw_kept / (epoch_hw_in + 1e-9))

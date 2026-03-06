@@ -6,9 +6,9 @@ from SRAM import SRAMWeightMemory
 class SurrogateFastSigmoid(torch.autograd.Function):
     """
     Surrogate Gradient for the non-differentiable Heaviside step function.
-    Uses a steeper alpha=5.0 for sparse SNN to encourage stronger binary behavior without exploding.
+    Uses a stepper alpha=2.0 for sparse SNN to encourage stronger binary behavior without exploding gradients.
     """
-    alpha = 5.0 
+    alpha = 2.0 
 
     @staticmethod
     def forward(ctx, input_tensor, threshold):
@@ -55,8 +55,8 @@ class LeNet5_Sparse_CSNN(nn.Module):
     def __init__(self, in_channels=2, num_classes=10):
         super().__init__()
         self.beta = 0.9
-        self.v_th = 1.5 # Higher global V_th to filter noise
-        self.rho = 0.1  # Threshold scaling rate
+        self.v_th = 1.0 # Restored to 1.0 to prevent dying neurons
+        self.rho = 0.05  # Reduced threshold scale to prevent total suppression
 
         self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=5, padding=2, bias=False)
         self.bn1 = nn.BatchNorm2d(32)
@@ -90,7 +90,8 @@ class LeNet5_Sparse_CSNN(nn.Module):
         def quantize_int8(w):
             """Simulates 8-bit SRAM quantization clamping."""
             w_max = w.abs().max()
-            if w_max == 0: return w
+            if w_max < 1e-6:
+                return w.detach().cpu().numpy(), 1.0
             scale = w_max / 127.0
             q_w = torch.round(w / scale) * scale
             return q_w.detach().cpu().numpy(), scale.item()
