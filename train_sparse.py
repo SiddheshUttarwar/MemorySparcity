@@ -6,6 +6,8 @@ try:
 except ImportError:
     summary = None
 from torch.utils.data import DataLoader
+from train import NMNISTDataset
+from sparse_snn_model import LeNet5_Sparse_CSNN
 import time
 
 def train_sparse():
