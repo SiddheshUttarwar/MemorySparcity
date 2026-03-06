@@ -2,7 +2,32 @@
 
 This repository contains a full pipeline to process the natively event-based N-MNIST dataset and train a deep **Convolutional Spiking Neural Network (CSNN)** using Surrogate Gradient Backpropagation (STBP).
 
-## Complete Guide: From Raw Data to GPU Training
+## 🚀 Instant Google Colab GPU Training (Recommended)
+
+Since training Spiking Neural Networks on CPU can take days, you can run this entire repository natively in the cloud for free using a Google Colab GPU (T4 / A100).
+
+1. Open a new [Google Colab Notebook](https://colab.research.google.com/).
+2. Change the Runtime to GPU: `Runtime -> Change runtime type -> T4 GPU`.
+3. Paste and run this exact cell block to instantly fetch, process, and train:
+
+```bash
+# 1. Clone the repository into the Colab environment
+!git clone https://github.com/SiddheshUttarwar/MemorySparcity.git
+%cd MemorySparcity
+
+# 2. Extract the N-MNIST Datasets silently (Required for Colab)
+!unzip -q Train.zip
+!unzip -q Test.zip
+
+# 3. Preprocess the 70,000 spikes (using Colab's Linux processors)
+!python preprocess_dataset.py
+
+# 4. Blast the fully-fledged Sparsity-Optimized SNN on the NVIDIA GPU!
+!python train_sparse.py
+```
+*(If you do not see `Train.zip` and `Test.zip` in your repo yet, simply drag and drop them from your computer into the left-hand folder menu inside Colab before running the `!unzip` commands.)*
+
+## Local Guide: Windows PyTorch Environment Setup
 
 Follow these exact steps to set up the environment, process the raw N-MNIST spike events, and train the network on your GPU.
 
