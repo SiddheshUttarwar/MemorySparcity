@@ -1,5 +1,6 @@
 import torch
 import random
+import matplotlib.pyplot as plt
 from train import NMNISTDataset
 from sparse_snn_model import LeNet5_Sparse_CSNN
 
@@ -40,6 +41,13 @@ def predict_single_samples():
     print("="*50)
 
     total_accuracy = 0
+    
+    # Setup the Canvas
+    plt.figure(figsize=(10, 6))
+    plt.title("Hardware Efficiency: Cumulative SRAM Reads Over Time", fontsize=14)
+    plt.xlabel("Execution Time Steps (t)", fontsize=12)
+    plt.ylabel("Cumulative Memory Fetches", fontsize=12)
+    plt.grid(True, linestyle='--', alpha=0.7)
 
     # 5. Execute Prediction and Fetch Physical Hardware Stats
     for i, idx in enumerate(indices):
@@ -85,9 +93,21 @@ def predict_single_samples():
         print(f"  SRAM Reads (Hidden): {internal_spikes:,}  (Adaptive Thresholds applied)")
         print(f"  ------------------------------------------------")
         print(f"  TOTAL SRAM READS = {total_sram_reads:,}")
+        
+        # Plot this sample's timeline curve
+        t_axis = list(range(1, actual_steps + 1))
+        cumulative_history = hw_metrics['cumulative_reads_over_time']
+        plt.plot(t_axis, cumulative_history, marker='o', label=f"Sample {i+1} (Pred: {pred_label})")
 
+    # Finalize and Save Graph
+    plt.legend()
+    graph_filename = "sram_cumulative_reads.png"
+    plt.savefig(graph_filename, dpi=300, bbox_inches='tight')
+    
     print("\n" + "="*50)
     print(f"Inference Batch Complete! Local Accuracy: {total_accuracy}/{num_samples} ({(total_accuracy/num_samples)*100:.1f}%)")
+    print(f"Quantitative Hardware Graph fully rendered to: {graph_filename}")
+    print("="*50)
 
 if __name__ == "__main__":
     predict_single_samples()

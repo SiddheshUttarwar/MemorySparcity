@@ -168,6 +168,10 @@ class LeNet5_Sparse_CSNN(nn.Module):
         out_spikes_seq = []
         l1_spike_sum = torch.tensor(0.0, device=device, requires_grad=True)
         
+        # Array to track cumulative SRAM Memory Fetches over time
+        cumulative_sram_reads = []
+        current_cumulative_reads = 0
+        
         actual_time_steps = T
         
         # Step-wise unrolling to allow Temporal Early-Exit
@@ -221,7 +225,13 @@ class LeNet5_Sparse_CSNN(nn.Module):
             out_spike, v4, v_th4 = self.lif4(x_t, v4, v_th4)
             
             out_spikes_seq.append(out_spike)
-            l1_spike_sum = l1_spike_sum + spike1.sum() + spike2.sum() + spike3.sum() + out_spike.sum()
+            # Calculate total spikes (and resulting internal SRAM fetches) for this exact timestep
+            step_internal_spikes = spike1.sum() + spike2.sum() + spike3.sum() + out_spike.sum()
+            l1_spike_sum = l1_spike_sum + step_internal_spikes
+            
+            # Step-wise Cumulative Trace
+            current_cumulative_reads += active_spikes + int(step_internal_spikes.item())
+            cumulative_sram_reads.append(current_cumulative_reads)
             
             if early_exit and t >= 3:
                 # Calculate mean rate so far
@@ -248,7 +258,8 @@ class LeNet5_Sparse_CSNN(nn.Module):
             'cs_asserts': hw_cs_asserts,
             'mac_ops': hw_mac_ops,
             'total_in': hw_total_raw_in,
-            'kept_in': hw_kept_in
+            'kept_in': hw_kept_in,
+            'cumulative_reads_over_time': cumulative_sram_reads
         }
         
         return spike_rate, out_spikes, l1_spike_sum, actual_time_steps, hw_metrics
