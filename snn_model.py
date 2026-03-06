@@ -8,7 +8,7 @@ class SurrogateFastSigmoid(torch.autograd.Function):
     Surrogate Gradient for the non-differentiable Heaviside step function.
     Using Fast Sigmoid H(x) = x / (1 + |x|) surrogate gradient function as requested.
     """
-    alpha = 1.0 # Controls the steepness of the surrogate gradient
+    alpha = 10.0  # Steepness of the surrogate gradient. 10.0 is recommended for deep SNNs.
 
     @staticmethod
     def forward(ctx, input_tensor, threshold):
