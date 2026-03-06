@@ -20,21 +20,25 @@ Since training Spiking Neural Networks on CPU can take days, you can run this en
 !unzip -q Test.zip
 
 # 3. Preprocess the 70,000 spikes (using Colab's Linux processors)
-!python preprocess_dataset.py
+!python preprocess_nmnist.py
 
 # 4. Install Visualization Hooks
 !pip install -q torchinfo torchviz graphviz
 
-# 5. Blast the fully-fledged Sparsity-Optimized SNN on the NVIDIA GPU!
+# 5. Train the standard Dense CSNN Baseline (Saves: best_baseline_model.pth)
+!python train.py
+
+# 6. Train the fully-fledged Sparsity-Optimized SNN on the NVIDIA GPU (Saves: best_sparse_model.pth)
 !python train_sparse.py
 
-# 6. Render the Architecture Diagrams
+# 7. Render the Architecture Diagrams
 !python visualize_model.py
 
-# 7. Run single Inferences and calculate exact Hardware Memory Fetches
+# 8. Run single Inferences and calculate exact Hardware Memory Fetches for Sparse gating
 !python predict_sparse.py
 
-# 8. Contrast the Baseline vs Sparse Models (Graphs Memory Savings!)
+# 9. Advanced Benchmarking: Statistically compare the Baseline SNN vs Sparse SNN Memory Overhead! 
+# (Generates hardware_comparative_analysis.png with Firing Rates, Gatekeeper Rejection, and SRAM savings measures)
 !python predict_compare.py
 ```
 *(If you do not see `Train.zip` and `Test.zip` in your repo yet, simply drag and drop them from your computer into the left-hand folder menu inside Colab before running the `!unzip` commands.)*
