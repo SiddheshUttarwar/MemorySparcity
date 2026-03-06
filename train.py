@@ -69,6 +69,9 @@ def train_snn():
 
     print("\n--- Starting CSNN Training (STBP) ---")
     
+    # Global Best model tracking across all epochs
+    best_val_acc = 0.0
+    
     # 4. Training Loop
     for epoch in range(epochs):
         model.train()
@@ -133,6 +136,15 @@ def train_snn():
         print(f"Epoch [{epoch+1}/{epochs}] | "
               f"Train Loss: {train_loss:.4f} Acc: {train_acc:.2f}% | "
               f"Test Loss: {val_loss:.4f} Acc: {val_acc:.2f}%")
+              
+        # Checkpoint the Best Model
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            print(f"  => [Saving Checkpoint]: New Best Accuracy {best_val_acc:.2f}%")
+            torch.save(model.state_dict(), "best_baseline_model.pth")
+            
+    print(f"\nBaseline Training Completed! Best Validation Accuracy: {best_val_acc:.2f}%")
+    print("Model saved to: best_baseline_model.pth")
 
 if __name__ == "__main__":
     train_snn()
