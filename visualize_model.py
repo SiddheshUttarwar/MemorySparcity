@@ -24,8 +24,8 @@ def visualize_snn():
     print("NETWORK ARCHITECTURE (torchinfo)")
     print("="*50)
     # Input tensor shape: (Batch Size, Time Steps, Channels, Height, Width)
-    # We use batch=1, T=20, Channels=2 (N-MNIST), H=34, W=34
-    summary(model, input_size=(1, 20, 2, 34, 34), device=device)
+    # We use batch=1, T=20, Channels=2 (N-MNIST), H=28, W=28 (after cropping)
+    summary(model, input_size=(1, 20, 2, 28, 28), device=device)
     
     # 3. Generate Computation Graph (torchviz)
     print("\n" + "="*50)
@@ -33,7 +33,7 @@ def visualize_snn():
     print("="*50)
     
     # Generate a dummy input matching the expected dimensions
-    dummy_input = torch.randn(1, 20, 2, 34, 34).to(device)
+    dummy_input = torch.randn(1, 20, 2, 28, 28).to(device)
     
     # Run a forward pass to trace the gradient operations
     spike_rate, _, _, _, _ = model(dummy_input, early_exit=False)

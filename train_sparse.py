@@ -31,7 +31,7 @@ def train_sparse():
     if summary is not None:
         print("\n--- Model Architecture Visualization ---")
         # Dummy input for torchinfo (Batch, Time, Channels, Height, Width)
-        summary(model, input_size=(1, 20, 2, 34, 34), device=DEVICE)
+        summary(model, input_size=(1, 20, 2, 28, 28), device=DEVICE)
         print("--------------------------------------\n")
 
     epochs = 10 # Increased to 10 for better convergence
