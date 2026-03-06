@@ -1,8 +1,8 @@
-# Neuromorphic Hardware Architecture: CSNN to Verilog
+# Neuromorphic Hardware Architecture: CSNN Inference Engine to Verilog
 
 This document provides directly translatable hardware block diagrams (RTL-level concepts) for both the Baseline Convolutional Spiking Neural Network (CSNN) and the Sparsity-Optimized CSNN (Sparse-SNN). 
 
-These Mermaid diagrams represent the flow of data across pipelined hardware mechanisms (MAC Units, SRAM modules, and Stateful LIF cores) so you can directly draft your Verilog/SystemVerilog equivalents.
+**Important Hardware Note:** This architecture describes a **pure inference engine**. Training occurs entirely off-chip (e.g., in PyTorch on a GPU). Once trained, the stationary INT8 weights are permanently locked into the SRAM instances. The hardware is designed *solely* for forward-pass execution, heavily optimized to physically trigger SRAM read enables *only* when an incoming spike explicitly demands it, guaranteeing extreme memory sparsity.
 
 ---
 
@@ -16,8 +16,8 @@ graph TD
     CLK[System Clock] --> CU[Global FSM / Control Unit]
     CU --> |T=1 to 20| IB[Input Spike Buffer]
     
-    %% Memory Blocks
-    subgraph Memory Hierarchy
+    %% Memory Blocks (Inference Only)
+    subgraph Memory_Hierarchy ["Memory Hierarchy (Trained Weights)"]
         SRAM1[(SRAM: Conv1 Weights)]
         SRAM2[(SRAM: Conv2 Weights)]
         SRAM3[(SRAM: FC1 Weights)]
@@ -25,7 +25,7 @@ graph TD
     end
 
     %% Layer 1 Execution
-    subgraph Layer 1: Conv + LIF
+    subgraph Layer_1 ["Layer 1: Conv + LIF"]
         MAC1[MAC Array]
         V_MEM1[(Registers: Mem. Potential V)]
         LIF_GEN1[Spike Generator <br> if V > V_th, S=1, V=V-V_th]
@@ -38,7 +38,7 @@ graph TD
     V_MEM1 --> |Voltage| LIF_GEN1
     
     %% Layer 2 Execution
-    subgraph Layer 2: Pool + Conv + LIF
+    subgraph Layer_2 ["Layer 2: Pool + Conv + LIF"]
         POOL1[Avg Pool / Subsampler]
         MAC2[MAC Array]
         V_MEM2[(Registers: Mem. Potential V)]
@@ -76,13 +76,13 @@ graph TD
     CU_EE --> |Enable| IB[Input Spike Buffer]
     
     %% Sparse Memory Blocks (INT8)
-    subgraph Quantized SRAM (8-bit Data Bus)
+    subgraph Quantized_SRAM ["Quantized SRAM (8-bit Data Bus)"]
         SRAM_Q1[(SRAM Conv1 INT8)]
         SRAM_Q2[(SRAM Conv2 INT8)]
     end
 
     %% Sparse Layer Execution
-    subgraph Sparse Layer: LIF with Adaptive V_th
+    subgraph Sparse_Layer ["Sparse Layer: LIF with Adaptive V_th"]
         MAC_Q[INT8 Sparse MAC Array <br> Triggered ONLY on Spike In]
         V_MEM_Q[(Membrane Reg V)]
         VTH_MEM_Q[(Threshold Reg V_th)]
@@ -109,7 +109,7 @@ graph TD
     RST --> V_MEM_Q
     
     %% Early Exit Logic
-    subgraph Output Classification Stage
+    subgraph Output_Classification_Stage ["Output Classification Stage"]
         OUT_ACCUM[Spike Confidence Integrator]
         PROB_CHK[Threshold Checker <br> Max Prob > 0.9]
     end
