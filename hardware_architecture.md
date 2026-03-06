@@ -73,12 +73,13 @@ The Sparse-SNN requires dynamic control logic. It introduces a **Dynamic Gatekee
 graph TD
     %% Advanced Global Control
     CLK[System Clock] --> CU_EE[Dynamic Control Unit + Early Exit FSM]
-    CU_EE --> |Enable| IB[Input Spike Buffer]
+    CU_EE --> |Enable: T=1 to 20| IB[Input Spike Buffer]
     
     %% Sparse Memory Blocks (INT8)
     subgraph Quantized_SRAM ["Quantized SRAM (8-bit Data Bus)"]
         SRAM_Q1[(SRAM Conv1 INT8)]
         SRAM_Q2[(SRAM Conv2 INT8)]
+        SRAM_FC[(SRAM FC INT8)]
     end
 
     %% Dynamic Gatekeeper Interface
@@ -107,7 +108,9 @@ graph TD
     IMP --> G_LOGIC
     RED --> G_LOGIC
     
-    G_LOGIC --> |Gate Keep = 1| MAC_Q
+    G_LOGIC --> |Gate Keep = 1 <br> (~70% Pass)| MAC_Q
+    G_LOGIC -.-> |Gate Drop = 0 <br> (~30% Energy Saved)| NULL_DROP((Spike Dropped <br> Zero Power))
+    
     SRAM_Q1 --> |INT8 Read if Gate Keep| MAC_Q
     MAC_Q --> ALU_V
     
@@ -115,23 +118,23 @@ graph TD
     V_MEM_Q --> CMP
     VTH_MEM_Q --> CMP
     
-    CMP --> |Spike Generated S| RST
-    CMP --> |Spike Generated S| ALU_VTH
+    CMP --> |Spike Generated S <br> <1% Firing Rate| RST
+    CMP --> |S=1| ALU_VTH
     ALU_VTH --> VTH_MEM_Q
     RST --> V_MEM_Q
     
     %% Early Exit Logic
     subgraph Output_Classification_Stage ["Output Classification Stage"]
         OUT_ACCUM[Spike Confidence Integrator]
-        PROB_CHK[Threshold Checker <br> Max Prob > 0.9]
+        PROB_CHK[Threshold Checker <br> Spike Count > Confidence Threshold]
     end
     
     CMP --> |Output Spikes| OUT_ACCUM
     OUT_ACCUM --> PROB_CHK
     
     %% Early Exit Disconnect
-    PROB_CHK --> |Confidence Reached!| CU_EE
-    CU_EE --> |SHUTDOWN CLOCK| MAC_Q
+    PROB_CHK --> |Confidence Reached! <br> (Avg T=4 to T=7)| CU_EE
+    CU_EE --> |SHUTDOWN CLOCK <br> Halt all SRAM Fetches| MAC_Q
 ```
 
 ### Verilog Submodule Updates (Sparse-Hybrid):
