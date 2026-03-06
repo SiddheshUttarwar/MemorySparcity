@@ -108,8 +108,8 @@ graph TD
     IMP --> G_LOGIC
     RED --> G_LOGIC
     
-    G_LOGIC --> |Gate Keep = 1 <br> (~70% Pass)| MAC_Q
-    G_LOGIC -.-> |Gate Drop = 0 <br> (~30% Energy Saved)| NULL_DROP((Spike Dropped <br> Zero Power))
+    G_LOGIC --> |"Gate Keep = 1 <br> (~70% Pass)"| MAC_Q
+    G_LOGIC -.-> |"Gate Drop = 0 <br> (~30% Energy Saved)"| NULL_DROP(("Spike Dropped <br> Zero Power"))
     
     SRAM_Q1 --> |INT8 Read if Gate Keep| MAC_Q
     MAC_Q --> ALU_V
@@ -118,7 +118,7 @@ graph TD
     V_MEM_Q --> CMP
     VTH_MEM_Q --> CMP
     
-    CMP --> |Spike Generated S <br> <1% Firing Rate| RST
+    CMP --> |"Spike Generated S <br> <1% Firing Rate"| RST
     CMP --> |S=1| ALU_VTH
     ALU_VTH --> VTH_MEM_Q
     RST --> V_MEM_Q
@@ -133,8 +133,8 @@ graph TD
     OUT_ACCUM --> PROB_CHK
     
     %% Early Exit Disconnect
-    PROB_CHK --> |Confidence Reached! <br> (Avg T=4 to T=7)| CU_EE
-    CU_EE --> |SHUTDOWN CLOCK <br> Halt all SRAM Fetches| MAC_Q
+    PROB_CHK --> |"Confidence Reached! <br> (Avg T=4 to T=7)"| CU_EE
+    CU_EE --> |"SHUTDOWN CLOCK <br> Halt all SRAM Fetches"| MAC_Q
 ```
 
 ### Verilog Submodule Updates (Sparse-Hybrid):
