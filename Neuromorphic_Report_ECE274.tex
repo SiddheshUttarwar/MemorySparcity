@@ -46,8 +46,6 @@ To address these inefficiencies, this project implements a highly optimized infe
 
 These hardware-centric design modifications are mapped explicitly to Verilog RTL components and simulated simultaneously via quantitative execution hooks in our PyTorch training pipeline. By intercepting inference data flows, we calculate the exact physical Static Random-Access Memory (SRAM) fetch reductions, establishing a robust bridge between high-accuracy Deep Learning metrics and true hardware-aware neuromorphic deployment.
 
-\section{Background and Foundations}
-
 \section{Data Preprocessing and Spatio-Temporal Extraction}
 
 \subsection{Address-Event Representation (AER)}
@@ -72,6 +70,7 @@ This extraction integrates the raw $(x, y, p, t)$ events into 3-Dimensional bool
 \caption{Spike raster plot illustrating the temporal density of N-MNIST events over time. The asynchronous stimulus is structured into T=20 discrete bins.}
 \label{fig:raster}
 \end{figure}
+\section{Background and Theoretical Foundations}
 
 \subsection{Leaky Integrate-and-Fire (LIF) Neurons}
 At the core of our CSNN is the Leaky Integrate-and-Fire neuron. The temporal dynamics of the membrane potential $V(t)$ in discrete time is modeled recursively:
