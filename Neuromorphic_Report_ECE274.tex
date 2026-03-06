@@ -259,12 +259,6 @@ mem\_en = gate\_keep,\;\; mac\_en = gate\_keep.
 \end{equation}
 This logic creates a hard control boundary that prevents unnecessary SRAM and MAC switching.
 
-\begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/circuit_dynamic_gatekeeper.png}}
-\caption{Digital circuit diagram of the Dynamic Gatekeeper module showing the Importance Monitor and Burst Redundancy sub-blocks feeding a 4-input AND gate to produce the unified $gate\_keep$ control signal.}
-\label{fig:circ_gatekeeper}
-\end{figure}
-
 \subsection{Importance Monitor Circuit (\texttt{importance\_monitor.v})}
 The importance monitor implements a per-input-ID activity histogram using saturating counters:
 \begin{itemize}
@@ -274,19 +268,7 @@ The importance monitor implements a per-input-ID activity histogram using satura
 \end{itemize}
 Functionally, this is a compact event-density estimator that filters low-frequency noise before memory access is requested.
 
-\begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/circuit_importance_monitor.png}}
-\caption{Importance Monitor circuit: saturating counter array with periodic window decay and threshold comparator driving $imp\_keep$.}
-\label{fig:circ_imp}
-\end{figure}
-
 The burst filter tracks \texttt{last\_pre\_id} and \texttt{repeat\_count}. If the same presynaptic ID appears repeatedly beyond \texttt{K\_MAX}, then \texttt{corr\_keep} is deasserted for that cycle. The circuit is intentionally simple (register compare + small counter) to keep control overhead lower than saved downstream memory cost.
-
-\begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/circuit_burst_redundancy.png}}
-\caption{Burst Redundancy Filter circuit: register comparator with repeat counter to detect and suppress consecutive duplicate spike events.}
-\label{fig:circ_burst}
-\end{figure}
 
 \subsection{Sparse Compute Path (\texttt{quantized\_sram.v} + \texttt{sparse\_mac.v})}
 The compute datapath is event-gated:
@@ -295,18 +277,6 @@ The compute datapath is event-gated:
     \item \textbf{Sparse MAC:} issues \texttt{read\_req} only on \texttt{spike\_in=1} and performs conditional accumulation.
 \end{itemize}
 Because SNN inputs are binary, multiplication is reduced to conditional addition, lowering arithmetic complexity and switching activity.
-
-\begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/circuit_quantized_sram.png}}
-\caption{Quantized SRAM module: INT8 weight memory array with gated read-enable. When $re=0$, output is zeroed and no dynamic read power is consumed.}
-\label{fig:circ_sram}
-\end{figure}
-
-\begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/circuit_sparse_mac.png}}
-\caption{Sparse MAC circuit: conditional adder (no DSP multiplier needed) with spike-gated accumulation and SRAM read request generation.}
-\label{fig:circ_mac}
-\end{figure}
 
 \subsection{Adaptive Neuron Circuit (\texttt{adaptive\_lif.v})}
 The adaptive neuron contains three hardware primitives:
@@ -317,20 +287,8 @@ The adaptive neuron contains three hardware primitives:
 \end{itemize}
 This block enforces temporal sparsity in hardware by raising threshold after spikes and decaying toward baseline otherwise.
 
-\begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/circuit_adaptive_lif.png}}
-\caption{Adaptive LIF neuron circuit: leaky integrator with shift-add approximation, threshold comparator, soft-reset feedback, and adaptive $V_{th}$ register.}
-\label{fig:circ_lif}
-\end{figure}
-
 \subsection{Early Exit Controller (\texttt{early\_exit\_fsm.v})}
 The controller maintains class accumulators and a time-step counter. When confidence is met or $T_{max}$ is reached, it deasserts \texttt{sys\_enable} and asserts \texttt{done}. This creates a global clock-enable style termination signal shared by upstream blocks, allowing full-pipeline stop without requiring fixed-length execution.
-
-\begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/circuit_early_exit_fsm.png}}
-\caption{Early Exit FSM circuit: 10 class accumulators with confidence comparators and OR-reduction driving the global $sys\_enable$ shutdown signal.}
-\label{fig:circ_fsm}
-\end{figure}
 
 \subsection{Top-Level Integration (\texttt{sparse\_snn\_top.v})}
 The top module wires all blocks into a single control/data chain:
@@ -339,11 +297,12 @@ Input \rightarrow Gatekeeper \rightarrow SRAM \rightarrow Sparse\;MAC \rightarro
 \end{equation}
 This integration is the architectural basis for circuit generation per block and for end-to-end synthesis/implementation flows.
 
-\begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/circuit_sparse_snn_top.png}}
-\caption{Top-level integration of the Sparse SNN inference pipeline showing the complete control/data chain with $sys\_enable$ feedback loop from the Early Exit FSM.}
-\label{fig:circ_top}
-\end{figure}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{Hardware_Architecture/full_circuit_diagram.png}
+\caption{Complete digital circuit schematic of the Sparse SNN inference pipeline. The diagram shows all RTL blocks with their internal components: the Dynamic Gatekeeper (containing the Importance Monitor counter array and Burst Redundancy comparator), the event-gated Quantized SRAM and Sparse MAC compute path, the Adaptive LIF neuron with threshold adaptation feedback, and the Early Exit FSM with class accumulators and confidence-driven $sys\_enable$ global shutdown. The $sys\_enable$ feedback loop from the FSM controls all upstream blocks, enabling full-pipeline termination once classification confidence is reached.}
+\label{fig:full_circuit}
+\end{figure*}
 
 \section{Experimental Setup}
 Training is performed in PyTorch using Adam ($10^{-3}$ learning rate), cosine annealing, and dropout in the readout stage. Hardware-proxy metrics are collected through forward hooks that count spike activity and estimate equivalent SRAM access events at each layer and time step. Specifically, we log proxies for $gate\_keep$, $RE_{conv1}$ activity ratio, per-layer spike rate, class-score trajectories $score_c(t)$, and inferred termination step to match the control/data signals in Table \ref{tab:signals}.
