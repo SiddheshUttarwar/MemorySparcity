@@ -30,6 +30,9 @@ Since training Spiking Neural Networks on CPU can take days, you can run this en
 
 # 6. Render the Architecture Diagrams
 !python visualize_model.py
+
+# 7. Run single Inferences and calculate exact Hardware Memory Fetches
+!python predict_sparse.py
 ```
 *(If you do not see `Train.zip` and `Test.zip` in your repo yet, simply drag and drop them from your computer into the left-hand folder menu inside Colab before running the `!unzip` commands.)*
 
