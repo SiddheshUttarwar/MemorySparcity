@@ -2,6 +2,8 @@
 
 This repository contains a full pipeline to process the natively event-based N-MNIST dataset and train a deep **Convolutional Spiking Neural Network (CSNN)** using Surrogate Gradient Backpropagation (STBP).
 
+📐 **Hardware Architecture:** For a detailed breakdown of every RTL block (Dynamic Gatekeeper, Quantized SRAM, Sparse MAC, Adaptive LIF, Early Exit FSM, and Top-Level Integration), see **[hardware_architecture.md](hardware_architecture.md)**.
+
 ## 🚀 Instant Google Colab GPU Training (Recommended)
 
 Since training Spiking Neural Networks on CPU can take days, you can run this entire repository natively in the cloud for free using a Google Colab GPU (T4 / A100).
