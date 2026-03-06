@@ -65,9 +65,9 @@ graph TD
 
 ---
 
-## 2. Sparsity-Optimized SNN (Sparse-SNN) Architecture
+## 2. Hybrid Sparsity-Optimized SNN (Sparse-SNN) Architecture
 
-The Sparse-SNN requires dynamic control logic. It introduces an **Adaptive Thresholding ALU** inside every LIF Core, **INT8 Arithmetic** to limit bus width, and a **Global Early-Exit FSM** to forcefully shut down the system clock before $T=20$ if an answer is confidently reached.
+The Sparse-SNN requires dynamic control logic. It introduces a **Dynamic Gatekeeper** pipeline before computation, an **Adaptive Thresholding ALU** inside every LIF Core, **INT8 Arithmetic** to limit bus width, and a **Global Early-Exit FSM** to forcefully shut down the system clock before $T=20$ if an answer is confidently reached.
 
 ```mermaid
 graph TD
@@ -81,9 +81,16 @@ graph TD
         SRAM_Q2[(SRAM Conv2 INT8)]
     end
 
+    %% Dynamic Gatekeeper Interface
+    subgraph Gatekeeper ["Dynamic Gatekeeper (Sparsity Routing)"]
+        IMP[Importance Monitor <br> Window Decay Counter]
+        RED[Burst Redundancy <br> Drops back-to-back hits]
+        G_LOGIC{AND Gate <br> imp_keep & corr_keep}
+    end
+
     %% Sparse Layer Execution
     subgraph Sparse_Layer ["Sparse Layer: LIF with Adaptive V_th"]
-        MAC_Q[INT8 Sparse MAC Array <br> Triggered ONLY on Spike In]
+        MAC_Q[INT8 Sparse MAC Array <br> Triggered ONLY on Gate Keep]
         V_MEM_Q[(Membrane Reg V)]
         VTH_MEM_Q[(Threshold Reg V_th)]
         
@@ -95,8 +102,13 @@ graph TD
     end
 
     %% Pipeline Flow
-    IB --> |S_in = 1| MAC_Q
-    SRAM_Q1 --> |INT8 Read| MAC_Q
+    IB --> |S_in = 1| IMP
+    IB --> |S_in = 1| RED
+    IMP --> G_LOGIC
+    RED --> G_LOGIC
+    
+    G_LOGIC --> |Gate Keep = 1| MAC_Q
+    SRAM_Q1 --> |INT8 Read if Gate Keep| MAC_Q
     MAC_Q --> ALU_V
     
     ALU_V --> V_MEM_Q
@@ -122,12 +134,21 @@ graph TD
     CU_EE --> |SHUTDOWN CLOCK| MAC_Q
 ```
 
-### Verilog Submodule Updates (Sparse):
-1.  **Sparse MAC Array (Triggered Reads)**:
-    *   In Verilog, wrap the SRAM `Read_Enable` pin with `if (Spike_In == 1'b1)`. If no spike arrives from the previous layer, the SRAM address is never pulsed, saving massive dynamic power.
+### Verilog Submodule Updates (Sparse-Hybrid):
+1.  **Dynamic Gatekeeper**:
+    *   **Importance Monitor**: Uses saturating counters and a periodic tick decay to track "useful" pixels. Drops random background sensor noise.
+    *   **Burst Redundancy**: Drops identical consecutive spikes on the same bus address.
+2.  **Sparse MAC Array (Triggered Reads)**:
+    *   In Verilog, the SRAM `Read_Enable` and MAC triggers are gated by the `gate_keep` logic. If a spike is dropped by the Gatekeeper, the SRAM address is never pulsed and held stable, eliminating capacitive read power draw!
     *   Arithmetic shifts from floating-point DSP slices to simple **INT8 Adders/Multipliers** (`signed [7:0]`).
-2.  **Adaptive V_th Registers**:
+3.  **Adaptive V_th Registers**:
     *   Instead of hardcoding `V_th = 200` globally, each neuron requires its own register.
     *   Logic: `always @(posedge clk) begin if (spike_out) V_th <= V_th + RHO_CONST; else V_th <= V_th - DECAY; end`
-3.  **Early Exit FSM**:
-    *   The `Control Unit` tracks `Time_Step`. If the `Output_Accumulator` signals the `Confidence_Flag`, the global FSM jumps to the `IDLE/DONE` state immediately, cutting off the `Enable` signal to all Memory and MAC blocks to freeze power consumption.
+4.  **Early Exit FSM**:
+    *   The `Control Unit` tracks `Time_Step`. If the `Output_Accumulator` signals the `Confidence_Flag` (e.g. 8 spikes reached), the global FSM pulls `global_enable = 0`, cutting off all Memory and MAC execution blocks globally to freeze power consumption before $T=MAX$.
+
+### Hardware Metrics (Python Extracted Proxy)
+The Python simulator proxies these Verilog outputs per epoch:
+*   `CS_asserts`: Proxy for SRAM memory fetch.
+*   `MAC_ops`: Proxy for total compute additions processed.
+*   `Input Gate Kept`: Ratio of how many native spikes were rejected by the Dynamic Gatekeeper before consuming energy.
