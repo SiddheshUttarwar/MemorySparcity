@@ -33,6 +33,9 @@ Since training Spiking Neural Networks on CPU can take days, you can run this en
 
 # 7. Run single Inferences and calculate exact Hardware Memory Fetches
 !python predict_sparse.py
+
+# 8. Contrast the Baseline vs Sparse Models (Graphs Memory Savings!)
+!python predict_compare.py
 ```
 *(If you do not see `Train.zip` and `Test.zip` in your repo yet, simply drag and drop them from your computer into the left-hand folder menu inside Colab before running the `!unzip` commands.)*
 
