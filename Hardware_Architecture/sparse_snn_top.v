@@ -13,6 +13,27 @@ module sparse_snn_top #(
     // Global signals
     wire sys_enable; 
 
+    // --- INSTANCE 0: DYNAMIC GATEKEEPER ---
+    wire gate_keep;
+    wire [1:0] gate_reason;
+    wire mem_en;
+    wire mac_en;
+
+    dynamic_gatekeeper #(
+        .ID_W(10),
+        .NUM_PRE(1024)
+    ) gatekeeper_inst (
+        .clk(clk),
+        .rst_n(rst_n),
+        .global_enable(sys_enable),
+        .spike_valid(input_spike[0]),
+        .pre_id(10'b0), // Truncated mockup routing
+        .gate_keep(gate_keep),
+        .gate_reason(gate_reason),
+        .mem_en(mem_en),
+        .mac_en(mac_en)
+    );
+
     // --- INSTANCE 1: QUANTIZED SRAM ---
     wire signed [DATA_WIDTH-1:0] weight_sram_out;    
     wire read_req_from_mac;
@@ -23,7 +44,7 @@ module sparse_snn_top #(
     ) sram_inst (
         .clk(clk),
         .addr(8'b0), // Tied off for mockup, normally controlled by counters
-        .re(read_req_from_mac), // SRAM is asleep unless MAC demands a read
+        .re(mem_en), // SRAM is gated actively by the dynamic gatekeeper
         .data_out(weight_sram_out)
     );
 
@@ -36,8 +57,8 @@ module sparse_snn_top #(
     ) mac_inst (
         .clk(clk),
         .rst_n(rst_n),
-        .sys_en(sys_enable),
-        .spike_in(input_spike[0]), // Triggers MAC accumulation AND SRAM read
+        .sys_en(mac_en), // Global freezes OR Local Gatekeeper denies!
+        .spike_in(input_spike[0]), // We still need the spike truth for the adder
         .weight_in(weight_sram_out),
         .read_req(read_req_from_mac),
         .current_out(mac_current_out)
