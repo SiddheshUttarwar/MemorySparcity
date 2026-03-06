@@ -1,16 +1,20 @@
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
+
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{algorithmic}
 \usepackage{graphicx}
 \usepackage{textcomp}
 \usepackage{xcolor}
+\usepackage{array}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric}
 
 \begin{document}
 
-\title{Energy-Efficient Spiking Neural Networks using Hybrid Dynamic Gatekeeping and Early Exit Frameworks\\
-\thanks{This project is submitted for ECE 274: Neuromorphic Computing.}
+\title{Hardware-Efficient Spiking Neural Networks using Dynamic Gatekeeping and Early Exit Control\\
+\thanks{Project report submitted for ECE 274: Neuromorphic Computing.}
 }
 
 \author{
@@ -30,180 +34,336 @@ Email: parthkulkarni@ucsb.edu}
 \maketitle
 
 \begin{abstract}
-As traditional Artificial Neural Networks (ANNs) scale in complexity, their power consumption on von Neumann architectures becomes prohibitive, particularly for edge devices. Neuromorphic Computing, via Spiking Neural Networks (SNNs), offers a biologically inspired alternative by processing temporal, event-driven data using extreme sparsity. However, while theoretical SNN models are sparse, translating this efficiency into practical hardware implementations often incurs significant memory static draw and redundant algorithmic operations. This paper presents a comprehensive Convolutional Spiking Neural Network (CSNN) architecture optimized for extreme resource constraints. We introduce a novel ``Dynamic Gatekeeper'' routing mechanism and an output-confidence ``Early-Exit'' temporal finite state machine (FSM). Evaluated on the natively event-based N-MNIST dataset, our optimized architecture achieves 91.83\% classification accuracy while physically dropping 30.5\% of sensory background noise and terminating inferences in an average of $T{=}4$ to $7$ time steps. By explicitly optimizing the spatial-temporal sparsity, we successfully reduce total dynamic SRAM fetches by an average of 69\% compared to dense baseline CSNN models, paving the way for ultra-low power neuromorphic edge intelligence.
+Spiking Neural Networks (SNNs) are attractive for edge inference because they are event-driven and sparse. In practice, however, energy savings are often limited by memory traffic and fixed-latency execution. This report presents a hardware-focused convolutional SNN (CSNN) flow that combines input-side dynamic gatekeeping with output-side early exit control. The gatekeeper suppresses low-information and redundant spike events before memory access, while an output confidence finite state machine terminates inference when class confidence is sufficient. Evaluated on N-MNIST, the proposed design achieves 91.83\% test accuracy (vs. 92.10\% baseline), rejects 30.5\% of input events, and reduces average SRAM fetches from approximately 172k to 52k per sample batch profile, corresponding to about 69\% lower memory-read activity. Inference commonly exits in 4--7 time steps instead of a fixed 20-step window. These results show that hardware-aware control logic can preserve accuracy while significantly reducing memory-dominated compute cost.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Spiking Neural Networks, Neuromorphic Hardware, Dynamic Gatekeeper, Early Exit, N-MNIST, Surrogate Gradients
+Spiking Neural Networks, Neuromorphic Hardware, Event-Driven Computing, Early Exit, N-MNIST, SRAM Efficiency
 \end{IEEEkeywords}
 
 \section{Introduction}
-The proliferation of edge computing demands intelligent processing mechanisms capable of operating under highly constrained energy and memory budgets. While traditional Artificial Neural Networks (ANNs) excel in visual classification tasks, they rely on synchronous, dense matrix multiplications that enforce continuous memory bandwidth utilization. This memory-wall bottleneck heavily penalizes autonomous and edge systems relying on battery power. Neuromorphic Computing approaches this bottleneck by mimicking biological paradigms, specifically via Spiking Neural Networks (SNNs) \cite{roy2019towards}.
+Energy efficiency is the central constraint in practical neuromorphic deployment. Although SNNs are theoretically sparse, deployed systems still incur high cost when data movement and control are not explicitly co-designed with the model. In digital implementations, SRAM access and repeated updates of inactive state dominate power and latency budgets.
 
-SNNs process information through asynchronous, binary spikes ($1$ or $0$), allowing hardware elements to remain entirely dormant until explicitly stimulated. This event-driven nature unlocks massive theoretical active-power savings. Despite these advantages, the physical instantiation of SNNs on traditional hardware or FPGAs faces significant hurdles. Constant memory polling to update non-firing neurons, the proliferation of back-to-back duplicate spikes (bursting), and rigid temporal execution windows all artificially inflate static energy consumption in practical digital logic equivalents.
+This project targets that gap through a hardware-first design objective: reduce memory-read activity without sacrificing useful classification accuracy. We start from a surrogate-gradient-trained CSNN baseline and introduce two architectural controls:
+\begin{itemize}
+    \item \textbf{Dynamic gatekeeping} to prevent low-value and redundant spikes from triggering downstream memory reads.
+    \item \textbf{Early exit control} to stop temporal processing once class confidence is reached.
+\end{itemize}
 
-To address these inefficiencies, this project implements a highly optimized inference engine specifically designed to process spatial-temporal event streams. Operating natively on the neuromorphic N-MNIST dataset, we establish a robust surrogate-gradient trained baseline Convolutional Spiking Neural Network (CSNN). We then layer rigorous architectural hardware enhancements directly into the Spiking pipeline, utilizing Importance Monitoring, Burst Redundancy Dropouts, Adaptive Leaky-Integrate-and-Fire (LIF) Thresholding, and Early-Exit State Machines \cite{neftci2019surrogate}. 
+These mechanisms are evaluated using quantitative execution hooks aligned with an RTL-oriented interpretation of memory access and control signals. The report emphasizes hardware-relevant outcomes: activation sparsity, read traffic, and temporal execution length.
 
-These hardware-centric design modifications are mapped explicitly to Verilog RTL components and simulated simultaneously via quantitative execution hooks in our PyTorch training pipeline. By intercepting inference data flows, we calculate the exact physical Static Random-Access Memory (SRAM) fetch reductions, establishing a robust bridge between high-accuracy Deep Learning metrics and true hardware-aware neuromorphic deployment.
+\section{Dataset and Preprocessing Pipeline}
 
-\section{Data Preprocessing and Spatio-Temporal Extraction}
+\subsection{N-MNIST Event Stream}
+N-MNIST converts static MNIST digits into asynchronous event streams captured by a dynamic vision sensor under controlled saccadic motion \cite{orchard2015converting}. Each event is represented as $(x,y,p,t)$ with pixel location, polarity, and timestamp.
 
-\subsection{Address-Event Representation (AER)}
-Standard datasets (like the classic MNIST) provide static, flattened frames representing light intensity. In contrast, neuromorphic event-cameras function like human retinas, reporting continuous, asynchronous voltage changes. The N-MNIST (Neuromorphic-MNIST) dataset consists of 70,000 temporal recordings of digits moving across a Field of View (FOV) \cite{orchard2015converting}. The recording sensors do not capture frames; instead, they produce an asynchronous stream of binary `ON' and `OFF' polarity spikes represented by $(x, y, p, t)$ tuples natively encoded in binary `.bin` files. 
+\subsection{Spatial Normalization}
+The native resolution of $34\times34$ is centered and cropped to $28\times28$ to align with a LeNet-style CSNN input. Events outside the retained field are discarded as peripheral noise.
 
-\subsection{Spatial Cropping and Alignment}
-The raw N-MNIST spike camera resolves a $34\times34$ visual matrix. To properly align the spatial vectors with standardized LeNet-5 computer vision architectures, the raw coordinate data was spatially centered and rigidly cropped down to a standard $28\times28$ dimensionality grid. Spikes falling outside the $x \in [3, 31], y \in [3, 31]$ bounding box were discarded to strip peripheral noise.
-
-\subsection{Boolean Spike Tensor Binning}
-To prepare the asynchronous event stream for synchronized GPU batch processing, the continuous $300 ms$ timeline of each recording was sliced iteratively into $T=20$ isometric integration frames (spanning $15 ms$ each). True event polarity was merged into a unipolar spatial envelope to simplify input dynamics.
-
-This extraction integrates the raw $(x, y, p, t)$ events into 3-Dimensional boolean tensors defined as $Spikes(T, C, H, W)$ where $T=20$, $C=1$, $H=28$, and $W=28$, as visualized in Figure \ref{fig:preprocessing}. This structural framing enables the internal neural layers to physically step through the recording timeline sequentially, explicitly isolating spatial features across a fixed interval of discrete clock ticks.
+\subsection{Temporal Binning}
+Each sample is binned into $T=20$ time slices over a 300 ms horizon. Polarity is merged into a single input channel, yielding tensors of shape $(T,C,H,W)=(20,1,28,28)$. This representation preserves temporal structure while enabling batched training and hardware-style stepwise execution.
 
 \begin{figure}[htbp]
 \centerline{\includegraphics[width=\linewidth]{plots/preprocessing_pipeline.png}}
-\caption{Visualized preprocessing pipeline converting raw spatial ON/OFF polarity events into structured 2D spatial maps for digit recognition.}
+\caption{Preprocessing flow from raw AER events to binned CSNN input tensors.}
 \label{fig:preprocessing}
 \end{figure}
 
 \begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{plots/digit_0_spatial.png}}
+\caption{Example spatial event accumulation for an N-MNIST sample (digit 0).}
+\label{fig:spatial}
+\end{figure}
+
+\begin{figure}[htbp]
 \centerline{\includegraphics[width=\linewidth]{plots/digit_0_raster.png}}
-\caption{Spike raster plot illustrating the temporal density of N-MNIST events over time. The asynchronous stimulus is structured into T=20 discrete bins.}
+\caption{Example temporal raster for the same sample, showing spike density across bins.}
 \label{fig:raster}
 \end{figure}
-\section{Background and Theoretical Foundations}
 
-\subsection{Leaky Integrate-and-Fire (LIF) Neurons}
-At the core of our CSNN is the Leaky Integrate-and-Fire neuron. The temporal dynamics of the membrane potential $V(t)$ in discrete time is modeled recursively:
-\begin{equation}
-V(t) = \beta V(t-1) + X(t) - S(t-1)V_{th}
-\end{equation}
-where $\beta$ regulates the subthreshold leakage, $X(t)$ is the sum of incoming weighted synaptic currents from the Multiply-Accumulate (MAC) arrays, and $V_{th}$ is the firing threshold. A binary output spike $S(t)$ is formulated as a Heaviside step mechanism:
-\begin{equation}
-S(t) = 
-\begin{cases} 
-1 & \text{if } V(t) \ge V_{th} \\
-0 & \text{otherwise}
-\end{cases}
-\end{equation}
-Upon firing, the membrane strictly executes a soft-reset by subtracting the threshold voltage to prevent information loss. In our physical implementation, the LIF neurons were configured with a leakage constant of $\beta=0.9$ and a normalized baseline threshold of $V_{th}=1.0$.
+\section{Model and Learning Method}
 
-\subsection{Surrogate Gradient Backpropagation}
-Because the derivative of the step function $S(t)$ is zero everywhere except the origin (where it is non-differentiable Dirac delta), standard Backpropagation Through Time (BPTT) fails. To solve the credit-assignment mechanism, we apply a Fast Sigmoid surrogate gradient during the backward pass \cite{zenke2021remarkable}:
-\begin{equation}
-\frac{\partial S}{\partial V} = \frac{1}{(1 + \alpha |V - V_{th}|)^2}
-\end{equation}
-This allows gradients to gracefully propagate back through the threshold operators to tune the convolutional filters against a standard Cross-Entropy loss applied to the total spike output rate. The surrogate gradient slope was empirically scaled with $\alpha=2.0$ to ensure stable derivative propagation across the $T=20$ integration span.
+\subsection{CSNN Topology}
+The baseline network is a convolutional SNN with Leaky Integrate-and-Fire (LIF) neurons and rate-based output decoding. Temporal processing unfolds for up to $T=20$ steps.
 
 \begin{figure}[htbp]
 \centerline{\includegraphics[width=\linewidth]{sparse_snn_architecture.png}}
-\caption{The spatio-temporal topology of our LeNet-5 Convolutional Spiking Neural Network (CSNN). The architecture processes streams across $T$ frames, mapping dense analog synapses to temporally unrolled discrete spikes.}
+\caption{Hardware-aware CSNN pipeline with temporal unrolling and sparse event flow.}
 \label{fig:architecture}
 \end{figure}
 
-\section{Sparsity-Optimized Hardware Routing and Digital Blocks}
-
-The true energy sink of a Neuromorphic accelerator lies in SRAM memory fetching ($E_{read}$). Fetching an 8-bit weight from localized memory requires orders of magnitude more Picojoules than executing the 8-bit addition itself. Therefore, a sparsity-optimized architecture must prioritize limiting bus requests. To validate these concepts physically alongside PyTorch, the algorithmic optimizations were explicitly mapped to behavioral Verilog RTL, comprising Quantized 8-bit SRAM modules, Sparse MAC Arrays (bypassing logic strictly when chip-enable drops), Adaptive LIF logic cores, and an Early-Exit Finite State Machine.
-
-\subsection{Dynamic Gatekeeper Framework}
-To physically realize event-driven energy savings, a conceptual ``Dynamic Gatekeeper'' array was positioned between the raw input buffer and the primary Conv1 execution cores. The Gatekeeper utilizes two specialized filters to intercept incoming signals.
-
-\subsubsection{Importance Monitor} High-frequency event cameras often induce background static. A localized saturating window array maps the $(X, Y)$ coordinates of the sensory stream. Events arriving at spatial coordinates exhibiting low temporal density are mathematically flagged as random static and explicitly purged before reaching the bus.
-
-\subsubsection{Burst Redundancy Filter} Edge-extraction saccadic tracking can result in duplicate back-to-back spikes targeting the exact same internal synapse. Given that sequential $T=t$ and $T=t+1$ identical stimuli do not meaningfully contribute to temporal feature variance, the Redundancy filter identifies consecutive $O(1)$ correlations and drops the secondary spike, halving the necessary fetches for dense intensity areas.
-
-Combined, this gatekeeping logic holds the unified $gate\_keep$ RTL logic pin low for massive subsets of the continuous data stream. While $gate\_keep=0$, both the $MAC$ arrays and the explicit SRAM $Read\_Enable$ triggers remain physically disconnected from the clock, shutting off active power draw for non-critical information.
-
-\subsection{Adaptive Thresholding Mechanism}
-By operating deeply recurrent Spiking Neural Networks, intermediate activation layers are susceptible to ``spike storms'' where dense object representation sends the intermediate LIF neurons into hyper-firing cascades, breaking internal sparsity patterns. 
-
-To mitigate exponential signal growth, the global static threshold $V_{th}$ was restructured into an auto-tuning adaptive state per-neuron:
+\subsection{LIF Dynamics}
+The membrane update at step $t$ is
 \begin{equation}
-V_{th}(t) = V_{th}(t-1) + \rho \cdot S(t) - \tau_{decay}
+V(t)=\beta V(t-1)+X(t)-S(t-1)V_{th},
 \end{equation}
-Where $\rho$ scales the threshold upwards instantly upon firing. This logic structurally incorporates biological Refractory Periods, punishing neurons for rapid firing and forcing the macro network to encode visual representations deeper into binary timing codes rather than high-density rate codes. This mechanism aggressively lowers the hidden layer firing rate to $<1\%$.
-
-\subsection{Output-Confidence Early-Exit FSM}
-Standard digital logic pipelines force fixed execution timelines. While our baseline CSNN evaluated input tensors over a rigid 20-tick clock cycle ($T=20$), visual streams rarely require the full temporal duration to determine structural outlines.
-
-An independent Finite State Machine (FSM) was bound to the final 10-node classification layer. The FSM integrates the discrete spiking behavior of the classification neurons throughout the unfolding time dimension. A global polling evaluation is defined:
+where $\beta$ is the leak term, $X(t)$ is synaptic input, and $S(t)$ is the output spike.
+Spiking follows
 \begin{equation}
-terminate = \exists_{c \in C} \left( \sum_{t=0}^{t_{current}} S_c(t) > \Psi_{conf} \right)
+S(t)=
+\begin{cases}
+1, & V(t)\ge V_{th}\\
+0, & \text{otherwise.}
+\end{cases}
 \end{equation}
-If any single classification node reaches the confidence threshold $\Psi_{conf}$, an interrupt instantly signals $sys\_en = 0$. This severs the global clock tree, freezing the entire neuromorphic pipeline. Hardware cycles ordinarily exhausted completing the $t_{current} \rightarrow T_{max}$ frames are bypassed completely.
+The implementation uses $\beta=0.9$ and nominal $V_{th}=1.0$.
 
-\begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{sram_cumulative_reads.png}}
-\caption{Tracking cumulative physical memory reads over the temporal computing window. The Baseline CSNN runs the full duration with a linear fetch increase, while the Sparse Architecture flattens internal activity due to Gatekeeping and cleanly terminates prior to $T=10$.}
-\label{fig:cumulative}
-\end{figure}
+\subsection{Surrogate Gradient Training}
+Because the spike function is non-differentiable, training uses a fast-sigmoid surrogate derivative \cite{neftci2019surrogate,zenke2021remarkable}:
+\begin{equation}
+\frac{\partial S}{\partial V}=\frac{1}{\left(1+\alpha|V-V_{th}|\right)^2},
+\end{equation}
+with $\alpha=2.0$.
 
-\section{Experimental Methodology}
+\section{Hardware-Oriented Optimizations}
 
-\subsection{Execution Environment}
-The CSNNs were constructed within the PyTorch machine-learning framework to exploit GPU-accelerated tensor optimization during the backpropagation phases. The network was trained using the Adam Optimizer initialized at $learning\_rate = 1e^{-3}$, decaying through a Cosine Annealing scheduler over 10 independent epochs. Dropout regularization arrays ($p=0.5$) were instituted within the Fully-Connected readout vectors to halt rigid temporal memorization.
+\subsection{Dynamic Gatekeeping}
+A gatekeeper block is placed ahead of Conv1 to reduce unnecessary memory reads. At each time step, the input event stream is evaluated before asserting memory or MAC activity.
+\begin{itemize}
+    \item \textbf{Importance monitor:} suppresses low-density spatial events likely to be background noise.
+    \item \textbf{Burst filter:} removes immediate duplicate events that add little new temporal information.
+\end{itemize}
+When events are rejected, downstream read-enable behavior is suppressed, reducing SRAM access pressure.
 
-\subsection{Simulating Hardware Traces}
-To extrapolate explicit Verilog RTL execution constraints directly from the pyTorch validation graphs, localized Forward Hooks were injected into every $LIFNodeSTBP$ module. These physical intercepts actively captured the quantity of binary $1$ states permeating the tensor activations, producing an exact $1:1$ numerical equivalent for the localized SRAM block access triggers representing the theoretical neuromorphic System-on-Chip (SoC).
+Signal-level operation is summarized using the control relation
+\begin{equation}
+RE_{conv1}(t)=valid_{in}(t)\land gate\_keep(t)\land sys\_en(t),
+\end{equation}
+where $RE_{conv1}$ is the Conv1 SRAM read-enable. If $gate\_keep(t)=0$, no Conv1 weight fetch is issued, and the corresponding MAC lane remains idle for that cycle.
 
-
-\section{Analytical Results and Discussion}
-
-The baseline architecture and the highly constrained Sparse-Optimized architecture were evaluated strictly against the 10,000 isolated N-MNIST testing matrices to analyze the balance of temporal recognition versus physical SRAM memory taxation.
-
-\subsection{Saptio-Temporal Classification Robustness}
-SNNs operating via pure Rate Coding typically suffer accuracy collapse when internal network sparsity is forcibly optimized. However, our architecture retained remarkable predictive retention. The conventional Dense CSNN Baseline achieved a maximum classification Test Accuracy of $92.10\%$. Uniquely, the fully configured Sparse-Architecture reached terminal Test Accuracy of $91.83\%$. This marginal $0.27\%$ deficit proves that aggressive input gating and threshold scaling strip localized noise rather than critical geometric event boundaries.
-
-\subsection{Physical Efficiency Benchmarks and Cumulative Reads}
-As visualized in the execution metrics hook arrays, over an isolated batch of 100 validation candidates, the true SRAM advantage of our network paradigm was definitively realized. Table \ref{tab:comparison} formalizes the absolute hardware metric discrepancies recorded natively during the quantitative prediction phase.
+\subsection{Signal Definitions and Dataflow}
+Table \ref{tab:signals} lists the main signals used by the hardware-oriented controller and their implementation meaning.
 
 \begin{table}[htbp]
-\caption{Hardware Benchmark Comparison (100 Samples)}
+\caption{Key Hardware Signals and Functions}
+\centering
+\small
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{|>{\centering\arraybackslash}m{1.55cm}|>{\centering\arraybackslash}m{1.25cm}|m{4.9cm}|}
+\hline
+\textbf{Signal} & \textbf{Type} & \textbf{Function} \\
+\hline
+$valid_{in}$ & 1-bit ctrl & Indicates a non-empty input event bin at the current time step. \\
+\hline
+$gate\_keep$ & 1-bit ctrl & Gatekeeper decision; 1 allows event propagation, 0 drops event as noise/redundancy. \\
+\hline
+$RE_{conv1}$ & 1-bit ctrl & Conv1 SRAM read-enable. Directly controls weight fetch activity. \\
+\hline
+$CE_{mac}$ & 1-bit ctrl & MAC clock-enable. Disables arithmetic switching when reads are suppressed. \\
+\hline
+$V(t)$ & state & LIF membrane potential state updated every active cycle. \\
+\hline
+$S(t)$ & 1-bit data & Neuron spike output after threshold comparison. \\
+\hline
+$V_{th}(t)$ & state & Adaptive threshold state for spike-rate regulation. \\
+\hline
+$score_c(t)$ & counter & Accumulated output spikes for class $c$ used by confidence logic. \\
+\hline
+$terminate$ & 1-bit ctrl & Asserted when any class score exceeds confidence threshold. \\
+\hline
+$sys\_en$ & 1-bit global ctrl & Global execution enable; deasserted by early-exit controller. \\
+\hline
+\end{tabular}
+\normalsize
+\label{tab:signals}
+\end{table}
+
+The per-cycle dataflow is:
+\begin{equation}
+\{RE_{conv1}, CE_{mac}\} \rightarrow \{V(t),S(t)\} \rightarrow score_c(t) \rightarrow terminate.
+\end{equation}
+This ordering makes the energy impact explicit: memory and switching activity are decided before neuron-state updates.
+
+\subsection{Adaptive Threshold Regulation}
+To prevent spike bursts in hidden layers, each neuron threshold is adapted over time:
+\begin{equation}
+V_{th}(t)=V_{th}(t-1)+\rho S(t)-\tau_{decay}.
+\end{equation}
+This raises threshold after firing and decays it gradually, encouraging sparse temporal encoding. In control terms, larger $V_{th}(t)$ lowers comparator hit probability and therefore reduces $S(t)=1$ events that would otherwise propagate to downstream memory requests in later layers.
+
+\subsection{Confidence-Driven Early Exit}
+A lightweight controller monitors output spike accumulation and terminates inference when confidence exceeds a threshold:
+\begin{equation}
+\textit{terminate}=\exists_{c\in C}\left(\sum_{t=0}^{t_{cur}} S_c(t)>\Psi_{conf}\right).
+\end{equation}
+The output counter update is
+\begin{equation}
+score_c(t)=score_c(t-1)+S_c(t),
+\end{equation}
+and once $terminate=1$, the controller sets
+\begin{equation}
+sys\_en(t+1)=0.
+\end{equation}
+This avoids unnecessary late time steps for easy samples and prevents additional memory accesses after confidence is reached.
+
+\subsection{Cycle-Level Execution Example}
+For one time step $t$, the control sequence is:
+\begin{itemize}
+    \item Evaluate $valid_{in}(t)$ and gatekeeper filters to generate $gate\_keep(t)$.
+    \item Assert $RE_{conv1}(t)$ and $CE_{mac}(t)$ only if event and gate conditions are met.
+    \item Update LIF states, produce spikes, and increment class counters.
+    \item Check $terminate$; if asserted, deassert $sys\_en$ for the next cycle.
+\end{itemize}
+This sequence captures the intended RTL behavior and clarifies how control decisions translate to lower dynamic activity.
+
+\section{RTL Circuit Generation and Block Architecture}
+In addition to algorithm-level validation, each proposed optimization is implemented as a synthesizable Verilog block in \texttt{Hardware\_Architecture/}. The module set forms a hardware dataflow that can be synthesized and integrated into a larger accelerator.
+
+\begin{figure*}[t]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  node distance=1.15cm and 0.65cm,
+  block/.style={draw, rounded corners, minimum width=2.7cm, minimum height=0.9cm, align=center, font=\footnotesize},
+  line/.style={-{Latex[length=2mm]}, thick}
+]
+\node[block] (in) {Input Event\\($spike\_valid, pre\_id$)};
+\node[block, right=of in] (gk) {Dynamic Gatekeeper\\($gate\_keep, mem\_en, mac\_en$)};
+\node[block, right=of gk] (sram) {Quantized SRAM\\($re, addr, data\_out$)};
+\node[block, right=of sram] (mac) {Sparse MAC\\($spike\_in, weight\_in$)};
+\node[block, right=of mac] (lif) {Adaptive LIF\\($current\_in, v_{th}(t)$)};
+\node[block, right=of lif] (out) {Output Spikes\\($class\_spikes$)};
+\node[block, below=1.35cm of lif] (fsm) {Early-Exit FSM\\($score_c, terminate, sys\_enable$)};
+
+\draw[line] (in) -- (gk);
+\draw[line] (gk) -- node[above,font=\scriptsize] {$mem\_en$} (sram);
+\draw[line] (sram) -- node[above,font=\scriptsize] {$weight\_in$} (mac);
+\draw[line] (gk) |- node[pos=0.25,left,font=\scriptsize] {$mac\_en$} (mac);
+\draw[line] (mac) -- node[above,font=\scriptsize] {$current\_in$} (lif);
+\draw[line] (lif) -- (out);
+\draw[line] (out) |- (fsm);
+\draw[line] (fsm.west) -| node[pos=0.24,below,font=\scriptsize] {$sys\_enable$} (gk.south);
+\draw[line] (fsm.north) -- node[right,font=\scriptsize] {$sys\_enable$} (lif.south);
+\end{tikzpicture}
+}
+\caption{Digital block architecture of the proposed sparse CSNN inference path. Control is closed by the early-exit FSM through global $sys\_enable$ gating.}
+\label{fig:rtl_architecture}
+\end{figure*}
+
+\subsection{Dynamic Gatekeeper Circuit (\texttt{dynamic\_gatekeeper.v})}
+This block is the first-stage control gate and combines two subcircuits:
+\begin{itemize}
+    \item \textbf{Importance monitor} (\texttt{importance\_monitor.v}) for low-information event rejection.
+    \item \textbf{Burst redundancy filter} (\texttt{burst\_redundancy.v}) for duplicate suppression.
+\end{itemize}
+It computes
+\begin{equation}
+gate\_keep = global\_enable \land spike\_valid \land imp\_keep \land corr\_keep,
+\end{equation}
+then directly drives
+\begin{equation}
+mem\_en = gate\_keep,\;\; mac\_en = gate\_keep.
+\end{equation}
+This logic creates a hard control boundary that prevents unnecessary SRAM and MAC switching.
+
+\subsection{Importance Monitor Circuit (\texttt{importance\_monitor.v})}
+The importance monitor implements a per-input-ID activity histogram using saturating counters:
+\begin{itemize}
+    \item Counter array: \texttt{cnt[0:NUM\_PRE-1]}.
+    \item Window decay: periodic right shift every \texttt{WIN} cycles.
+    \item Keep rule: \texttt{imp\_keep = (cnt[pre\_id] >= THRESH)}.
+\end{itemize}
+Functionally, this is a compact event-density estimator that filters low-frequency noise before memory access is requested.
+
+\subsection{Burst Redundancy Circuit (\texttt{burst\_redundancy.v})}
+The burst filter tracks \texttt{last\_pre\_id} and \texttt{repeat\_count}. If the same presynaptic ID appears repeatedly beyond \texttt{K\_MAX}, then \texttt{corr\_keep} is deasserted for that cycle. The circuit is intentionally simple (register compare + small counter) to keep control overhead lower than saved downstream memory cost.
+
+\subsection{Sparse Compute Path (\texttt{quantized\_sram.v} + \texttt{sparse\_mac.v})}
+The compute datapath is event-gated:
+\begin{itemize}
+    \item \textbf{Quantized SRAM:} reads INT8 weights only when \texttt{re=1}.
+    \item \textbf{Sparse MAC:} issues \texttt{read\_req} only on \texttt{spike\_in=1} and performs conditional accumulation.
+\end{itemize}
+Because SNN inputs are binary, multiplication is reduced to conditional addition, lowering arithmetic complexity and switching activity.
+
+\subsection{Adaptive Neuron Circuit (\texttt{adaptive\_lif.v})}
+The adaptive neuron contains three hardware primitives:
+\begin{itemize}
+    \item Leaky integrator via shift-add approximation.
+    \item Comparator for spike generation (\texttt{is\_spike}).
+    \item Threshold adaptation register updated by firing history.
+\end{itemize}
+This block enforces temporal sparsity in hardware by raising threshold after spikes and decaying toward baseline otherwise.
+
+\subsection{Early Exit Controller (\texttt{early\_exit\_fsm.v})}
+The controller maintains class accumulators and a time-step counter. When confidence is met or $T_{max}$ is reached, it deasserts \texttt{sys\_enable} and asserts \texttt{done}. This creates a global clock-enable style termination signal shared by upstream blocks, allowing full-pipeline stop without requiring fixed-length execution.
+
+\subsection{Top-Level Integration (\texttt{sparse\_snn\_top.v})}
+The top module wires all blocks into a single control/data chain:
+\begin{equation}
+Input \rightarrow Gatekeeper \rightarrow SRAM \rightarrow Sparse\;MAC \rightarrow Adaptive\;LIF \rightarrow Early\ Exit\ FSM.
+\end{equation}
+This integration is the architectural basis for circuit generation per block and for end-to-end synthesis/implementation flows.
+
+\section{Experimental Setup}
+Training is performed in PyTorch using Adam ($10^{-3}$ learning rate), cosine annealing, and dropout in the readout stage. Hardware-proxy metrics are collected through forward hooks that count spike activity and estimate equivalent SRAM access events at each layer and time step. Specifically, we log proxies for $gate\_keep$, $RE_{conv1}$ activity ratio, per-layer spike rate, class-score trajectories $score_c(t)$, and inferred termination step to match the control/data signals in Table \ref{tab:signals}.
+
+\section{Results}
+The sparse hardware-aware design maintains baseline-level accuracy while reducing read traffic and execution length.
+
+\begin{table}[htbp]
+\caption{Hardware-Relevant Comparison (100-Sample Profile)}
 \begin{center}
 \begin{tabular}{|c|c|c|}
 \hline
-\textbf{Metric} & \textbf{Baseline Dense CSNN} & \textbf{Sparse Architecture} \\
+\textbf{Metric} & \textbf{Baseline CSNN} & \textbf{Proposed Sparse CSNN} \\
 \hline
-\textbf{Test Accuracy (\%)} & 92.10\% & 91.83\% \\
+Test Accuracy (\%) & 92.10\% & 91.83\% \\
 \hline
-\textbf{Avg. Execution Steps} & 20.0 (Fixed) & 5.8 (Dynamic) \\
+Average Time Steps & 20.0 (fixed) & 5.8 (dynamic) \\
 \hline
-\textbf{Gatekeeper Rejection} & 0\% (All Fetched) & 30.5\% (Dropped) \\
+Input Event Rejection & 0\% & 30.5\% \\
 \hline
-\textbf{Mean Firing Rate (\%)} & 3.21\% & 0.78\% \\
+Mean Firing Rate (\%) & 3.21\% & 0.78\% \\
 \hline
-\textbf{Avg. SRAM Fetches} & $\sim$172,000 & $\sim$52,000 \\
+Average SRAM Fetches & $\sim$172,000 & $\sim$52,000 \\
 \hline
-\textbf{SRAM Efficiency} & 1.00$\times$ Base & \textbf{3.30$\times$ Lower Power} \\
+Relative Read Cost & 1.00$\times$ & 0.30$\times$ \\
 \hline
 \end{tabular}
 \label{tab:comparison}
 \end{center}
 \end{table}
 
-\begin{itemize}
-    \item \textbf{Gatekeeper Rejection:} The dual Spatial/Burst logic arrays intercepted and permanently halted $30.5\%$ of the environmental N-MNIST incoming spikes prior to Conv1 integration.
-    \item \textbf{Firing Rate Degradation:} Applying the Adaptive Threshold modification, the total system-wide activation density stabilized at precisely $0.781\%$ of neurons active per execution step, massively outperforming the uncontrolled dense framework ($3.21\%$).
-    \item \textbf{Cumulative Temporal Fetches:} Our theoretical framework constrained evaluations to $T=20$ integration steps. Driven by the Early Exit Finite State Machine, $100\%$ of Sparse inferences breached terminal confidence margins strictly between $T=4$ and $T=7$. This is mathematically evidenced by Figure \ref{fig:cumulative}, where the cumulative memory reads entirely flatline early in the temporal cycle, halting all localized memory operations instantly.
-\end{itemize}
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{sram_cumulative_reads.png}}
+\caption{Cumulative memory-read trend over time. Early exit and gatekeeping flatten read growth.}
+\label{fig:cumulative}
+\end{figure}
 
 \begin{figure}[htbp]
 \centerline{\includegraphics[width=\linewidth]{hardware_comparative_analysis.png}}
-\caption{Statistical comparative analysis of the Mean Neuronal Firing Rate (Left) and Absolute Hardware Fetch Cost (Right) averaged over a 100-sample test cohort.}
+\caption{Comparative firing-rate and hardware-fetch behavior across baseline and sparse models.}
 \label{fig:comparative}
 \end{figure}
 
-These combined attributes compound to define our absolute hardware efficiency rating. The conventional CSNN paradigm required an overwhelming average of $172,000$ independent weight memory fetch operations to traverse $T=20$ logic frames. The Sparse mechanism decimated this constraint uniformly, evaluating inputs using only $52,000$ operations on average. This signifies a massive $>69\%$ global efficiency amplification directly translating to SoC static layout preservation.
+The proposed configuration reduces estimated SRAM fetches by roughly 69\% while retaining accuracy within 0.3 percentage points of baseline. Most samples terminate before step 8, confirming that fixed-length execution is unnecessary for a large portion of inputs.
 
 \section{Conclusion}
-This paper outlines a rigorous topological expansion for integrating high-fidelity Convolutional Spiking Neural Networks directly into energy-starved computational edges. While generic surrogate-trained SNNs naturally offer spatial efficiencies, executing event-driven operations across synchronized digital clock domains results in extensive internal redundancies. By fundamentally modifying the RTL data-path via Dynamic Saccadic Gatekeepers, Adaptive Activation Thresholding, and Global Early Exit Clock Termination structures, we proved that neuromorphic evaluation matrices can be overwhelmingly constrained without degrading network intelligence. 
+This work demonstrates that hardware-aware control in SNN inference can provide substantial practical efficiency gains beyond algorithmic sparsity alone. By combining input-side event filtering with output-side early exit, the design significantly lowers memory-read activity and temporal compute length while preserving classification performance on N-MNIST.
 
-Sustaining a $91.83\%$ N-MNIST classification reliability while simultaneously purging nearly 70\% of local computation arrays highlights the profound scalability edge. Applying these methods directly inside application-specific neuromorphic processors provides a clear path forward for sustainable, instantaneous ambient perception logic implementations.
+The primary contribution is not a new neuron model, but a deployment-oriented strategy that links SNN behavior to digital hardware costs. This makes the approach directly relevant to low-power neuromorphic accelerators and edge SoCs where memory access dominates energy.
 
 \begin{thebibliography}{00}
-\bibitem{roy2019towards} K. Roy, A. Jaiswal, and P. Panda, ``Towards spike-based machine intelligence with neuromorphic computing,'' \textit{Nature}, vol. 575, no. 7784, pp. 607-617, 2019.
-\bibitem{neftci2019surrogate} E. O. Neftci, H. Mostafa, and F. Zenke, ``Surrogate Gradient Learning in Spiking Neural Networks: Bringing the Power of Gradient-Based Optimization to Spiking Neural Networks,'' \textit{IEEE Signal Processing Magazine}, vol. 36, no. 6, pp. 51-63, Nov. 2019.
-\bibitem{zenke2021remarkable} F. Zenke and T. P. Vogels, ``The remarkable robustness of surrogate gradient learning for instilling complex function in spiking neural networks,'' \textit{Neural Computation}, vol. 33, no. 4, pp. 899-925, 2021.
-\bibitem{orchard2015converting} G. Orchard, A. Jayawant, G. K. Cohen, and N. Thakor, ``Converting Static Image Datasets to Spiking Neuromorphic Datasets Using Saccades,'' \textit{Frontiers in Neuroscience}, vol. 9, p. 437, 2015.
+\bibitem{roy2019towards}
+K. Roy, A. Jaiswal, and P. Panda,
+``Towards spike-based machine intelligence with neuromorphic computing,''
+\textit{Nature}, vol. 575, no. 7784, pp. 607--617, 2019.
+
+\bibitem{neftci2019surrogate}
+E. O. Neftci, H. Mostafa, and F. Zenke,
+``Surrogate Gradient Learning in Spiking Neural Networks: Bringing the power of gradient-based optimization to spiking neural networks,''
+\textit{IEEE Signal Processing Magazine}, vol. 36, no. 6, pp. 51--63, 2019.
+
+\bibitem{zenke2021remarkable}
+F. Zenke and T. P. Vogels,
+``The remarkable robustness of surrogate gradient learning for instilling complex function in spiking neural networks,''
+\textit{Neural Computation}, vol. 33, no. 4, pp. 899--925, 2021.
+
+\bibitem{orchard2015converting}
+G. Orchard, A. Jayawant, G. K. Cohen, and N. Thakor,
+``Converting static image datasets to spiking neuromorphic datasets using saccades,''
+\textit{Frontiers in Neuroscience}, vol. 9, p. 437, 2015.
 \end{thebibliography}
 
 \end{document}
