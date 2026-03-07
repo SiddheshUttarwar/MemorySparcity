@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import math
 from SRAM import SRAMWeightMemory
-from gatekeeper import GatekeeperController
 
 class SurrogateFastSigmoid(torch.autograd.Function):
     """
@@ -53,50 +52,32 @@ class LIFNodeSTBP_Sparse(nn.Module):
         return spike, v, v_th
 
 class LeNet5_Sparse_CSNN(nn.Module):
-    def __init__(self, in_channels=2, num_classes=10, config=None):
+    def __init__(self, in_channels=2, num_classes=10):
         super().__init__()
-        # Load config or use defaults
-        self.use_gatekeeper = config.use_gatekeeper if config else True
-        self.use_early_exit = config.use_early_exit if config else True
-        self.use_adaptive_threshold = config.use_adaptive_threshold if config else True
-        self.use_sparsity_reg = config.use_sparsity_reg if config else True
-        self.confidence_margin = config.confidence_margin if config else 0.9
-        self.temperature = config.temperature if config else 5.0
-
-        self.beta = config.beta if config else 0.9
-        self.v_th = config.v_threshold if config else 1.0
-        self.rho = config.rho if config else 0.05
-
-        # Effective rho: 0 when adaptive threshold is disabled
-        effective_rho = self.rho if self.use_adaptive_threshold else 0.0
+        self.beta = 0.9
+        self.v_th = 1.0 # Restored to 1.0 to prevent dying neurons
+        self.rho = 0.05  # Reduced threshold scale to prevent total suppression
 
         self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=5, padding=2, bias=False)
         self.bn1 = nn.BatchNorm2d(32)
-        self.lif1 = LIFNodeSTBP_Sparse(beta=self.beta, v_threshold=self.v_th, rho=effective_rho)
+        self.lif1 = LIFNodeSTBP_Sparse(beta=self.beta, v_threshold=self.v_th, rho=self.rho)
         self.pool1 = nn.AvgPool2d(2, 2)
 
         self.conv2 = nn.Conv2d(32, 64, kernel_size=5, padding=2, bias=False)
         self.bn2 = nn.BatchNorm2d(64)
-        self.lif2 = LIFNodeSTBP_Sparse(beta=self.beta, v_threshold=self.v_th, rho=effective_rho)
+        self.lif2 = LIFNodeSTBP_Sparse(beta=self.beta, v_threshold=self.v_th, rho=self.rho)
         self.pool2 = nn.AvgPool2d(2, 2)
 
         self.flatten = nn.Flatten()
-        self.dropout = nn.Dropout(config.dropout if config else 0.5)
-
+        
+        # Dropout to combat the specific Overfitting observed during training
+        self.dropout = nn.Dropout(0.5) 
+        
         self.fc1 = nn.Linear(64 * 7 * 7, 128, bias=False)
-        self.lif3 = LIFNodeSTBP_Sparse(beta=self.beta, v_threshold=self.v_th, rho=effective_rho)
-
+        self.lif3 = LIFNodeSTBP_Sparse(beta=self.beta, v_threshold=self.v_th, rho=self.rho)
+        
         self.fc2 = nn.Linear(128, num_classes, bias=False)
-        self.lif4 = LIFNodeSTBP_Sparse(beta=self.beta, v_threshold=self.v_th, rho=effective_rho)
-
-        # Formalized Gatekeeper Controller
-        self.gatekeeper = GatekeeperController(
-            channels=in_channels, height=28, width=28,
-            imp_thresh=config.imp_thresh if config else 1.0,
-            win_tick=config.imp_win_tick if config else 5,
-            max_repeats=config.max_repeats if config else 1,
-            enabled=self.use_gatekeeper,
-        )
+        self.lif4 = LIFNodeSTBP_Sparse(beta=self.beta, v_threshold=self.v_th, rho=self.rho)
 
         self._initialize_weights()
         self._init_sram()
@@ -152,141 +133,133 @@ class LeNet5_Sparse_CSNN(nn.Module):
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
 
-    def forward(self, x_seq, early_exit=None, confidence_margin=None):
+    def forward(self, x_seq, early_exit=True, confidence_margin=0.9):
         B, T, C, H, W = x_seq.shape
         device = x_seq.device
-
-        # Use instance defaults if not overridden
-        if early_exit is None:
-            early_exit = self.use_early_exit
-        if confidence_margin is None:
-            confidence_margin = self.confidence_margin
-
+        
         # Initialize membrane potentials and dynamic thresholds
         v1 = torch.zeros(B, 32, H, W, device=device)
         v_th1 = torch.full((B, 32, H, W), self.v_th, device=device)
-
+        
         v2 = torch.zeros(B, 64, H//2, W//2, device=device)
         v_th2 = torch.full((B, 64, H//2, W//2), self.v_th, device=device)
-
+        
         v3 = torch.zeros(B, 128, device=device)
         v_th3 = torch.full((B, 128), self.v_th, device=device)
-
+        
         v4 = torch.zeros(B, 10, device=device)
         v_th4 = torch.full((B, 10), self.v_th, device=device)
-
-        # Initialize Gatekeeper state for this batch
-        self.gatekeeper.reset_state(B, device)
-
-        # Hardware Counters
+        
+        # --- HYBRID SNN GATEKEEPER STATE (Input Interface) ---
+        imp_cnt = torch.zeros(B, C, H, W, device=device)
+        win_tick = 5
+        imp_thresh = 1.0 # Requires at least 1 previous spike to be considered 'important'
+        
+        last_spiked = torch.zeros(B, C, H, W, dtype=torch.bool, device=device)
+        repeat_count = torch.zeros(B, C, H, W, device=device)
+        max_repeats = 1
+        
+        # Hardware Counters for Training Logging
         hw_cs_asserts = 0
         hw_mac_ops = 0
         hw_total_raw_in = 0
         hw_kept_in = 0
-
+        
         out_spikes_seq = []
         l1_spike_sum = torch.tensor(0.0, device=device, requires_grad=True)
-
+        
+        # Array to track cumulative SRAM Memory Fetches over time
         cumulative_sram_reads = []
         current_cumulative_reads = 0
-
-        # Per-timestep spike tracking
-        per_layer_spikes = {0: 0, 1: 0, 2: 0, 3: 0}
-        active_neurons_per_t = []
-        confidence_trajectory = []
-
+        
         actual_time_steps = T
-
+        
         # Step-wise unrolling to allow Temporal Early-Exit
         for t in range(T):
             x_raw_t = x_seq[:, t, ...]
             hw_total_raw_in += (x_raw_t > 0).sum().item()
-
-            # --- Gatekeeper Decision (formalized module) ---
-            x_t, gate_metrics = self.gatekeeper(x_raw_t, t)
-
-            active_spikes = gate_metrics.kept
+            
+            # 1. Importance Monitor (Update Counters)
+            imp_cnt = imp_cnt + x_raw_t
+            if t > 0 and t % win_tick == 0:
+                imp_cnt = torch.floor(imp_cnt / 2.0) # Bit-shift decay
+            
+            imp_keep = (imp_cnt >= imp_thresh)
+            
+            # 2. Burst Redundancy Monitor
+            is_spike = (x_raw_t > 0)
+            repeat_count = torch.where(is_spike & last_spiked, repeat_count + 1, torch.zeros_like(repeat_count))
+            last_spiked = is_spike
+            corr_keep = (repeat_count <= max_repeats)
+            
+            # 3. Sparsity Controller (Gatekeeper Decision)
+            gate_keep = is_spike & imp_keep & corr_keep
+            x_t = gate_keep.float() * x_raw_t
+            
+            # Increment Hardware Activity Proxies based on exactly what breached the gate
+            active_spikes = gate_keep.sum().item()
             hw_kept_in += active_spikes
-            hw_cs_asserts += active_spikes
-            hw_mac_ops += active_spikes * (5 * 5 * 32)
-
+            hw_cs_asserts += active_spikes # Memory Asserted only on Kept Spike
+            hw_mac_ops += active_spikes * (5*5 * 32) # Approx MAC ops triggered per kept spike against Conv1 weights
+            
             # Layer Pass
             x_t = self.conv1(x_t)
             x_t = self.bn1(x_t)
             spike1, v1, v_th1 = self.lif1(x_t, v1, v_th1)
             x_t = self.pool1(spike1)
-
+            
             x_t = self.conv2(x_t)
             x_t = self.bn2(x_t)
             spike2, v2, v_th2 = self.lif2(x_t, v2, v_th2)
             x_t = self.pool2(spike2)
-
+            
             x_t = self.flatten(x_t)
+            
+            # Apply dropout during training to randomly kill 50% of signals!
             x_t = self.dropout(x_t)
-
+            
             x_t = self.fc1(x_t)
             spike3, v3, v_th3 = self.lif3(x_t, v3, v_th3)
-
+            
             x_t = self.fc2(spike3)
             out_spike, v4, v_th4 = self.lif4(x_t, v4, v_th4)
-
+            
             out_spikes_seq.append(out_spike)
-
-            # Per-layer spike counting
-            s1 = spike1.sum()
-            s2 = spike2.sum()
-            s3 = spike3.sum()
-            s4 = out_spike.sum()
-            per_layer_spikes[0] += int(s1.item())
-            per_layer_spikes[1] += int(s2.item())
-            per_layer_spikes[2] += int(s3.item())
-            per_layer_spikes[3] += int(s4.item())
-
-            step_internal_spikes = s1 + s2 + s3 + s4
+            # Calculate total spikes (and resulting internal SRAM fetches) for this exact timestep
+            step_internal_spikes = spike1.sum() + spike2.sum() + spike3.sum() + out_spike.sum()
             l1_spike_sum = l1_spike_sum + step_internal_spikes
-
-            # Active neurons this timestep
-            active_neurons = int((spike1 > 0).sum().item() + (spike2 > 0).sum().item() +
-                                 (spike3 > 0).sum().item() + (out_spike > 0).sum().item())
-            active_neurons_per_t.append(active_neurons)
-
-            # Cumulative SRAM reads
+            
+            # Step-wise Cumulative Trace
             current_cumulative_reads += active_spikes + int(step_internal_spikes.item())
             cumulative_sram_reads.append(current_cumulative_reads)
-
-            # Confidence tracking & early exit
-            current_spikes = torch.stack(out_spikes_seq, dim=1)
-            current_rate = current_spikes.mean(dim=1)
-            probs = torch.softmax(current_rate * self.temperature, dim=1)
-            max_probs, _ = probs.max(dim=1)
-            confidence_trajectory.append(float(max_probs.mean().item()))
-
+            
             if early_exit and t >= 3:
+                # Calculate mean rate so far
+                current_spikes = torch.stack(out_spikes_seq, dim=1) 
+                current_rate = current_spikes.mean(dim=1)
+                probs = torch.softmax(current_rate * 5.0, dim=1) # Temperature scaling
+                max_probs, _ = probs.max(dim=1)
+                
+                # If ALL items in batch are confident, EXIT EARLY to save SRAM reads!
                 if (max_probs > confidence_margin).all():
                     actual_time_steps = t + 1
                     break
-
-        # Pad sequence with zeros if early exit happened
+                    
+        # Pad sequence with zeros if early exit happened to maintain tensor shapes downstream
         while len(out_spikes_seq) < T:
             out_spikes_seq.append(torch.zeros_like(out_spikes_seq[-1]))
-
+            
         out_spikes = torch.stack(out_spikes_seq, dim=1)
+        # Calculate spike rate over the ACTUAL simulated steps, not T
         spike_rate = out_spikes[:, :actual_time_steps, :].mean(dim=1)
-
-        # Structured hardware metrics (backward compatible + extended)
-        gk_summary = self.gatekeeper.get_summary()
+        
+        # Return Hardware Counter Dictionary
         hw_metrics = {
             'cs_asserts': hw_cs_asserts,
             'mac_ops': hw_mac_ops,
             'total_in': hw_total_raw_in,
             'kept_in': hw_kept_in,
-            'cumulative_reads_over_time': cumulative_sram_reads,
-            # Extended metrics for publication
-            'per_layer_spikes': per_layer_spikes,
-            'active_neurons_per_t': active_neurons_per_t,
-            'confidence_trajectory': confidence_trajectory,
-            'gk_summary': gk_summary,
-            'sram_reads_hidden': int(l1_spike_sum.item()),
+            'cumulative_reads_over_time': cumulative_sram_reads
         }
-
+        
         return spike_rate, out_spikes, l1_spike_sum, actual_time_steps, hw_metrics
