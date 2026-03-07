@@ -29,6 +29,16 @@ import numpy as np
 # Ensure project modules (SRAM, sparse_snn_model, etc.) are importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Import model classes so torch.load can unpickle full model objects
+try:
+    from snn_model import *       # noqa: F403
+except Exception:
+    pass
+try:
+    from sparse_snn_model import *  # noqa: F403
+except Exception:
+    pass
+
 def quantize_to_int8(weight_tensor):
     """
     Quantize a floating-point weight tensor to signed INT8 [-128, 127].
@@ -102,16 +112,6 @@ def main():
         print(f"ERROR: Model file '{args.model}' not found!")
         print("  Train the sparse model first: python train_sparse.py")
         return
-
-    # Import model classes so torch.load can unpickle full model objects
-    try:
-        from snn_model import *       # noqa: F403
-    except Exception:
-        pass
-    try:
-        from sparse_snn_model import *  # noqa: F403
-    except Exception:
-        pass
 
     checkpoint = torch.load(args.model, map_location='cpu', weights_only=False)
     
