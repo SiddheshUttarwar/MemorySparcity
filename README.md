@@ -123,3 +123,48 @@ To test this high-efficiency hardware model natively, simply run:
 python train_sparse.py
 ```
 *Note: The terminal will now actively output `T-Avg` (average steps taken due to Early Exit) and `SRAM Eff` (Accuracy / Total Spikes).*
+
+### Step 7: Export Trained Weights to Verilog `.mem` Files
+After training, bridge the software-hardware gap by exporting the INT8-quantized weights into Verilog-compatible `.mem` hex files for loading into `quantized_sram.v` via `$readmemh`:
+
+```bash
+python export_weights_mem.py --model best_sparse_model.pth
+```
+
+This generates files in `mem_weights/`:
+| File | Layer | Entries |
+|------|-------|---------|
+| `conv1_weights.mem` | Conv1 (2×5×5 → 32) | 1,600 |
+| `conv2_weights.mem` | Conv2 (32×5×5 → 64) | 51,200 |
+| `fc1_weights.mem` | FC1 (3136 → 128) | 401,408 |
+| `fc2_weights.mem` | FC2 (128 → 10) | 1,280 |
+| `quantization_scales.txt` | Dequantization scales | — |
+| `load_weights.vh` | Verilog `$readmemh` snippet | — |
+
+## 📂 Project Structure
+
+```
+├── snn_model.py              # Baseline LeNet-5 CSNN (dense)
+├── sparse_snn_model.py       # Sparse CSNN with gatekeeper + early exit + adaptive LIF
+├── SRAM.py                   # Simulated SRAM weight memory model
+├── train.py                  # Baseline CSNN training
+├── train_sparse.py           # Sparse CSNN training with HW metrics
+├── predict_sparse.py         # Single-sample inference with SRAM read tracking
+├── predict_compare.py        # 100-sample baseline vs sparse comparison
+├── export_weights_mem.py     # PyTorch → Verilog .mem weight export
+├── preprocess_dataset.py     # N-MNIST event → tensor preprocessing
+├── visualize_model.py        # Architecture diagram generation
+├── Hardware_Architecture/    # Verilog RTL modules
+│   ├── sparse_snn_top.v      # Top-level integration
+│   ├── quantized_sram.v      # SRAM with MEM_FILE parameter
+│   ├── sparse_mac.v          # Spike-driven MAC unit
+│   ├── adaptive_lif.v        # LIF neuron with adaptive threshold
+│   ├── dynamic_gatekeeper.v  # Input event filter
+│   ├── early_exit_fsm.v      # Confidence-based early exit FSM
+│   ├── importance_monitor.v  # Density-based activity filter
+│   ├── burst_redundancy.v    # Consecutive spike suppressor
+│   └── tb_sram_weights.v     # Testbench for weight loading
+├── mem_weights/              # Exported INT8 .mem files for $readmemh
+└── hardware_architecture.md  # Detailed RTL block documentation
+```
+
