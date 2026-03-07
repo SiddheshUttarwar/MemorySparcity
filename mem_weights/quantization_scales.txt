@@ -1,0 +1,7 @@
+# Quantization Scale Manifest
+# To dequantize: float_value = int8_value * scale
+
+conv1_weights: 0.01625265
+conv2_weights: 0.00480087
+fc1_weights: 0.03407089
+fc2_weights: 0.00522284
