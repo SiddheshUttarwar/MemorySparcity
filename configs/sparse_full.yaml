@@ -1,0 +1,37 @@
+# Experiment: sparse_full
+# Full sparse CSNN with all optimizations enabled
+
+name: "sparse_full"
+seed: 42
+description: "Full sparse CSNN with gatekeeper + early exit + adaptive threshold"
+
+in_channels: 2
+num_classes: 10
+beta: 0.9
+v_threshold: 1.0
+rho: 0.05
+
+epochs: 10
+batch_size: 32
+lr: 0.002
+lambda_reg: 1e-7
+dropout: 0.5
+scheduler: "cosine"
+
+T_max: 20
+confidence_margin: 0.9
+temperature: 5.0
+
+imp_thresh: 1.0
+imp_win_tick: 5
+max_repeats: 1
+
+use_gatekeeper: true
+use_early_exit: true
+use_adaptive_threshold: true
+use_quantization: true
+use_sparsity_reg: true
+
+data_dir: "preprocessed_data_native"
+results_dir: "results"
+checkpoint_path: "best_sparse_model.pth"

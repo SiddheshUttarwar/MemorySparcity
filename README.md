@@ -4,6 +4,55 @@ This repository contains a full pipeline to process the natively event-based N-M
 
 📐 **Hardware Architecture:** For a detailed breakdown of every RTL block (Dynamic Gatekeeper, Quantized SRAM, Sparse MAC, Adaptive LIF, Early Exit FSM, and Top-Level Integration), see **[hardware_architecture.md](hardware_architecture.md)**.
 
+## 📂 Project Structure
+
+```
+configs/                  # YAML experiment configs (baseline, ablation variants)
+results/raw/              # Per-run CSV outputs (auto-generated)
+results/processed/        # Aggregated ablation tables (auto-generated)
+plots/                    # Generated publication figures
+Hardware_Architecture/    # Verilog RTL modules
+mem_weights/              # Exported INT8 .mem files for $readmemh
+
+experiment_config.py      # Dataclass config + seed fixing + ablation flags
+gatekeeper.py             # Formalized GatekeeperController module
+hardware_profiler.py      # Per-sample HW accounting + energy estimation
+results_logger.py         # Structured CSV/JSON logging
+sparse_snn_model.py       # LeNet-5 Sparse CSNN with ablation support
+train_sparse.py           # Config-driven training script
+run_ablation.py           # Automated ablation study runner
+generate_plots.py         # Publication figure generator
+export_weights_mem.py     # PyTorch → Verilog .mem weight export
+```
+
+## 🔬 Reproducing Results
+
+### Single Training Run
+```bash
+python train_sparse.py --config configs/sparse_full.yaml --seed 42
+```
+
+### Full Ablation Study (8 configs × 3 seeds)
+```bash
+python run_ablation.py --seeds 42 123 7
+```
+
+### Generate Publication Plots
+```bash
+python generate_plots.py
+```
+
+### Ablation Flags
+Each component can be independently enabled/disabled via config:
+| Flag | Component | Effect when OFF |
+|------|-----------|----------------|
+| `use_gatekeeper` | Dynamic Gatekeeper | All input spikes pass through |
+| `use_early_exit` | Temporal Early Exit | Always runs full T=20 timesteps |
+| `use_adaptive_threshold` | Adaptive LIF Threshold | Fixed threshold (rho=0) |
+| `use_sparsity_reg` | L1 Spike Regularization | No spike penalty in loss |
+| `use_quantization` | INT8 SRAM Quantization | Full precision weights |
+
+
 ## 🚀 Instant Google Colab GPU Training (Recommended)
 
 Since training Spiking Neural Networks on CPU can take days, you can run this entire repository natively in the cloud for free using a Google Colab GPU (T4 / A100).
