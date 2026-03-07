@@ -21,9 +21,13 @@ Output:
 """
 
 import os
+import sys
 import argparse
 import torch
 import numpy as np
+
+# Ensure project modules (SRAM, sparse_snn_model, etc.) are importable
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def quantize_to_int8(weight_tensor):
     """
@@ -46,7 +50,7 @@ def int8_to_hex(val):
     Convert a signed INT8 value to a 2-character hex string (two's complement).
     Examples: 0 -> '00', 127 -> '7f', -1 -> 'ff', -128 -> '80'
     """
-    return format(val & 0xFF, '02x')
+    return format(int(val) & 0xFF, '02x')
 
 
 def export_layer_to_mem(weight_tensor, filepath, layer_name):
@@ -99,10 +103,26 @@ def main():
         print("  Train the sparse model first: python train_sparse.py")
         return
 
+    # Import model classes so torch.load can unpickle full model objects
+    try:
+        from snn_model import *       # noqa: F403
+    except Exception:
+        pass
+    try:
+        from sparse_snn_model import *  # noqa: F403
+    except Exception:
+        pass
+
     checkpoint = torch.load(args.model, map_location='cpu', weights_only=False)
     
-    # Handle both raw state_dict and wrapped checkpoint formats
-    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+    # Handle multiple checkpoint formats:
+    # 1. Raw state_dict (OrderedDict of tensors)
+    # 2. Dict with 'model_state_dict' or 'state_dict' key
+    # 3. Full model object (has .state_dict() method)
+    if hasattr(checkpoint, 'state_dict'):
+        # Full model object was saved with torch.save(model, ...)
+        state_dict = checkpoint.state_dict()
+    elif isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         state_dict = checkpoint['model_state_dict']
     elif isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
         state_dict = checkpoint['state_dict']
