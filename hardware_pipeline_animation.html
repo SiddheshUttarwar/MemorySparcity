@@ -1,571 +1,823 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sparse SNN Hardware Pipeline — Spike Data Flow Animation</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sparse SNN Hardware Pipeline — Spike Data Flow Animation</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-  body {
-    font-family: 'Inter', sans-serif;
-    background: #0a0e1a;
-    color: #e0e6f0;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0e1a;
+            color: #e0e6f0;
+            min-height: 100vh;
+        }
 
-  .header {
-    text-align: center;
-    padding: 30px 20px 10px;
-  }
-  .header h1 {
-    font-size: 1.8rem;
-    background: linear-gradient(135deg, #00d4ff, #7b61ff, #ff6b9d);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 6px;
-  }
-  .header p {
-    color: #8892a8;
-    font-size: 0.9rem;
-  }
+        .header {
+            text-align: center;
+            padding: 24px 20px 8px;
+        }
 
-  .controls {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    padding: 16px;
-    flex-wrap: wrap;
-  }
-  .controls button {
-    font-family: 'Inter', sans-serif;
-    font-weight: 600;
-    font-size: 0.85rem;
-    padding: 10px 22px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.25s;
-  }
-  .btn-play {
-    background: linear-gradient(135deg, #00d4ff, #7b61ff);
-    color: #fff;
-  }
-  .btn-play:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(0,212,255,0.4); }
-  .btn-step {
-    background: rgba(123,97,255,0.2);
-    color: #b8a5ff;
-    border: 1px solid rgba(123,97,255,0.4) !important;
-  }
-  .btn-step:hover { background: rgba(123,97,255,0.35); }
-  .btn-reset {
-    background: rgba(255,107,157,0.15);
-    color: #ff6b9d;
-    border: 1px solid rgba(255,107,157,0.3) !important;
-  }
-  .btn-reset:hover { background: rgba(255,107,157,0.3); }
+        .header h1 {
+            font-size: 1.6rem;
+            background: linear-gradient(135deg, #00d4ff, #7b61ff, #ff6b9d);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
 
-  .pipeline {
-    display: flex;
-    align-items: stretch;
-    gap: 0;
-    padding: 10px 20px;
-    overflow-x: auto;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
+        .header p {
+            color: #8892a8;
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
 
-  .stage {
-    flex: 0 0 auto;
-    width: 170px;
-    border-radius: 14px;
-    padding: 14px;
-    position: relative;
-    transition: all 0.5s;
-    opacity: 0.35;
-    transform: scale(0.95);
-  }
-  .stage.active {
-    opacity: 1;
-    transform: scale(1);
-    box-shadow: 0 0 30px rgba(0,212,255,0.15);
-  }
-  .stage.done {
-    opacity: 0.7;
-    transform: scale(0.97);
-  }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            padding: 14px;
+            flex-wrap: wrap;
+        }
 
-  .stage-header {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .stage-icon { font-size: 1.1rem; }
-  .stage-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; }
-  .stage-desc { font-size: 0.72rem; color: #8892a8; line-height: 1.4; margin-bottom: 10px; }
+        .controls button {
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 0.8rem;
+            padding: 9px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
 
-  .spike-grid { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; margin-bottom: 8px; }
-  .spike-cell {
-    width: 8px; height: 8px;
-    border-radius: 2px;
-    transition: all 0.3s;
-  }
+        .btn-play {
+            background: linear-gradient(135deg, #00d4ff, #7b61ff);
+            color: #fff;
+        }
 
-  .stat-bar {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem;
-    margin-top: 4px;
-    padding: 5px 8px;
-    border-radius: 6px;
-    background: rgba(0,0,0,0.3);
-  }
-  .stat-val { font-weight: 600; }
+        .btn-play:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 18px rgba(0, 212, 255, 0.4);
+        }
 
-  .arrow {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    color: #2a3050;
-    flex: 0 0 30px;
-    transition: color 0.5s;
-  }
-  .arrow.active { color: #00d4ff; text-shadow: 0 0 10px rgba(0,212,255,0.5); }
+        .btn-step {
+            background: rgba(123, 97, 255, 0.2);
+            color: #b8a5ff;
+            border: 1px solid rgba(123, 97, 255, 0.4) !important;
+        }
 
-  /* Stage colors */
-  .s-input   { background: linear-gradient(145deg, rgba(0,212,255,0.12), rgba(0,212,255,0.04)); border: 1px solid rgba(0,212,255,0.25); }
-  .s-input .stage-header { color: #00d4ff; }
-  .s-gate    { background: linear-gradient(145deg, rgba(255,107,157,0.12), rgba(255,107,157,0.04)); border: 1px solid rgba(255,107,157,0.25); }
-  .s-gate .stage-header { color: #ff6b9d; }
-  .s-sram    { background: linear-gradient(145deg, rgba(255,183,77,0.12), rgba(255,183,77,0.04)); border: 1px solid rgba(255,183,77,0.25); }
-  .s-sram .stage-header { color: #ffb74d; }
-  .s-mac     { background: linear-gradient(145deg, rgba(123,97,255,0.12), rgba(123,97,255,0.04)); border: 1px solid rgba(123,97,255,0.25); }
-  .s-mac .stage-header { color: #b8a5ff; }
-  .s-lif     { background: linear-gradient(145deg, rgba(0,230,118,0.12), rgba(0,230,118,0.04)); border: 1px solid rgba(0,230,118,0.25); }
-  .s-lif .stage-header { color: #00e676; }
-  .s-exit    { background: linear-gradient(145deg, rgba(255,215,0,0.12), rgba(255,215,0,0.04)); border: 1px solid rgba(255,215,0,0.25); }
-  .s-exit .stage-header { color: #ffd740; }
+        .btn-reset {
+            background: rgba(255, 107, 157, 0.15);
+            color: #ff6b9d;
+            border: 1px solid rgba(255, 107, 157, 0.3) !important;
+        }
 
-  /* Narration box */
-  .narration {
-    max-width: 800px;
-    margin: 16px auto;
-    padding: 18px 24px;
-    border-radius: 12px;
-    background: rgba(123,97,255,0.08);
-    border: 1px solid rgba(123,97,255,0.2);
-    font-size: 0.9rem;
-    line-height: 1.6;
-    text-align: center;
-    min-height: 70px;
-    transition: all 0.4s;
-  }
-  .narration .step-num {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    color: #7b61ff;
-    display: block;
-    margin-bottom: 4px;
-  }
+        .digit-select {
+            background: rgba(0, 212, 255, 0.15);
+            color: #00d4ff;
+            border: 1px solid rgba(0, 212, 255, 0.3) !important;
+        }
 
-  /* Legend */
-  .legend {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-    padding: 10px;
-    flex-wrap: wrap;
-    font-size: 0.75rem;
-    color: #8892a8;
-  }
-  .legend-item { display: flex; align-items: center; gap: 5px; }
-  .legend-dot {
-    width: 10px; height: 10px;
-    border-radius: 2px;
-  }
+        .narration {
+            max-width: 850px;
+            margin: 10px auto;
+            padding: 14px 20px;
+            border-radius: 10px;
+            background: rgba(123, 97, 255, 0.08);
+            border: 1px solid rgba(123, 97, 255, 0.2);
+            font-size: 0.88rem;
+            line-height: 1.55;
+            text-align: center;
+            min-height: 60px;
+        }
 
-  /* Spike colors */
-  .spike-active    { background: #00d4ff; box-shadow: 0 0 4px rgba(0,212,255,0.6); }
-  .spike-noise     { background: #ff6b9d; box-shadow: 0 0 4px rgba(255,107,157,0.4); }
-  .spike-inactive  { background: #1a2040; }
-  .spike-rejected  { background: #3a1525; }
-  .spike-weight    { background: #ffb74d; box-shadow: 0 0 4px rgba(255,183,77,0.4); }
-  .spike-mac       { background: #b8a5ff; box-shadow: 0 0 4px rgba(123,97,255,0.4); }
-  .spike-membrane  { background: #00e676; box-shadow: 0 0 4px rgba(0,230,118,0.4); }
-  .spike-fire      { background: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.8); }
-  .spike-subthresh { background: #0d3d20; }
-  .spike-confident { background: #ffd740; box-shadow: 0 0 4px rgba(255,215,0,0.6); }
+        .narration .step-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            color: #7b61ff;
+            display: block;
+            margin-bottom: 3px;
+        }
 
-  @media (max-width: 900px) {
-    .pipeline { flex-direction: column; align-items: center; }
-    .arrow { transform: rotate(90deg); flex: 0 0 20px; }
-    .stage { width: 90%; max-width: 320px; }
-  }
-</style>
+        /* Main stage area */
+        .stage-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 0;
+            padding: 16px 10px;
+            flex-wrap: wrap;
+        }
+
+        .stage-box {
+            flex: 0 0 auto;
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+            transition: all 0.5s;
+            opacity: 0.3;
+            transform: scale(0.93);
+            min-width: 120px;
+        }
+
+        .stage-box.active {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .stage-box.done {
+            opacity: 0.65;
+            transform: scale(0.96);
+        }
+
+        .stage-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 3px;
+        }
+
+        .stage-name {
+            font-size: 0.82rem;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+
+        .stage-dims {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.62rem;
+            color: #8892a8;
+            margin-bottom: 6px;
+        }
+
+        .spike-grid-wrap {
+            display: inline-block;
+            margin: 0 auto 6px;
+        }
+
+        .spike-grid {
+            display: grid;
+            gap: 1px;
+            margin: 0 auto;
+            transition: all 0.6s;
+        }
+
+        .spike-cell {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 1px;
+            transition: background 0.3s, box-shadow 0.3s;
+        }
+
+        .stat-line {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            padding: 4px 6px;
+            border-radius: 5px;
+            background: rgba(0, 0, 0, 0.3);
+            margin-top: 4px;
+        }
+
+        .arrow-sep {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            color: #1e2540;
+            flex: 0 0 24px;
+            transition: color 0.4s;
+            padding-top: 50px;
+        }
+
+        .arrow-sep.lit {
+            color: #00d4ff;
+            text-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+        }
+
+        /* Colors per stage */
+        .s0 {
+            background: linear-gradient(145deg, rgba(0, 212, 255, 0.1), rgba(0, 212, 255, 0.03));
+            border: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        .s0 .stage-label {
+            color: #00d4ff;
+        }
+
+        .s1 {
+            background: linear-gradient(145deg, rgba(255, 107, 157, 0.1), rgba(255, 107, 157, 0.03));
+            border: 1px solid rgba(255, 107, 157, 0.2);
+        }
+
+        .s1 .stage-label {
+            color: #ff6b9d;
+        }
+
+        .s2 {
+            background: linear-gradient(145deg, rgba(0, 230, 118, 0.1), rgba(0, 230, 118, 0.03));
+            border: 1px solid rgba(0, 230, 118, 0.2);
+        }
+
+        .s2 .stage-label {
+            color: #00e676;
+        }
+
+        .s3 {
+            background: linear-gradient(145deg, rgba(255, 183, 77, 0.1), rgba(255, 183, 77, 0.03));
+            border: 1px solid rgba(255, 183, 77, 0.2);
+        }
+
+        .s3 .stage-label {
+            color: #ffb74d;
+        }
+
+        .s4 {
+            background: linear-gradient(145deg, rgba(123, 97, 255, 0.1), rgba(123, 97, 255, 0.03));
+            border: 1px solid rgba(123, 97, 255, 0.2);
+        }
+
+        .s4 .stage-label {
+            color: #b8a5ff;
+        }
+
+        .s5 {
+            background: linear-gradient(145deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.03));
+            border: 1px solid rgba(255, 215, 0, 0.2);
+        }
+
+        .s5 .stage-label {
+            color: #ffd740;
+        }
+
+        /* Cell color classes */
+        .c-off {
+            background: #0e1325;
+        }
+
+        .c-spike {
+            background: #00d4ff;
+            box-shadow: 0 0 3px rgba(0, 212, 255, 0.5);
+        }
+
+        .c-noise {
+            background: #ff6b9d;
+            box-shadow: 0 0 3px rgba(255, 107, 157, 0.4);
+        }
+
+        .c-reject {
+            background: #2a1020;
+        }
+
+        .c-feat {
+            background: #00e676;
+            box-shadow: 0 0 3px rgba(0, 230, 118, 0.4);
+        }
+
+        .c-featlo {
+            background: #0a3318;
+        }
+
+        .c-weight {
+            background: #ffb74d;
+            box-shadow: 0 0 3px rgba(255, 183, 77, 0.4);
+        }
+
+        .c-wlo {
+            background: #3d2a0e;
+        }
+
+        .c-mac {
+            background: #b8a5ff;
+            box-shadow: 0 0 3px rgba(123, 97, 255, 0.4);
+        }
+
+        .c-maclo {
+            background: #1e1540;
+        }
+
+        .c-fire {
+            background: #ffffff;
+            box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+        }
+
+        .c-membr {
+            background: #00e676;
+            box-shadow: 0 0 3px rgba(0, 230, 118, 0.3);
+        }
+
+        .c-sub {
+            background: #0d3520;
+        }
+
+        .c-conf {
+            background: #ffd740;
+            box-shadow: 0 0 4px rgba(255, 215, 0, 0.5);
+        }
+
+        .c-conflo {
+            background: #3d3510;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 14px;
+            padding: 8px;
+            flex-wrap: wrap;
+            font-size: 0.68rem;
+            color: #8892a8;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .legend-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 2px;
+        }
+
+        @media (max-width: 800px) {
+            .stage-container {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .arrow-sep {
+                transform: rotate(90deg);
+                flex: 0 0 18px;
+                padding-top: 0;
+            }
+
+            .stage-box {
+                width: 92%;
+                max-width: 300px;
+            }
+        }
+    </style>
 </head>
+
 <body>
 
-<div class="header">
-  <h1>⚡ Sparse SNN Hardware Pipeline</h1>
-  <p>Watch how each RTL block transforms spike data as it flows through the accelerator</p>
-</div>
+    <div class="header">
+        <h1>⚡ Sparse SNN Hardware Pipeline</h1>
+        <p>Watch how each RTL block transforms a real N-MNIST spike image as it flows through the accelerator</p>
+    </div>
 
-<div class="controls">
-  <button class="btn-play" id="btnPlay" onclick="autoPlay()">▶ Auto Play</button>
-  <button class="btn-step" onclick="nextStep()">→ Next Step</button>
-  <button class="btn-reset" onclick="resetAll()">↺ Reset</button>
-</div>
+    <div class="controls">
+        <button class="btn-play" id="btnPlay" onclick="autoPlay()">▶ Auto Play</button>
+        <button class="btn-step" onclick="nextStep()">→ Next Step</button>
+        <button class="btn-reset" onclick="resetAll()">↺ Reset</button>
+        <button class="digit-select" onclick="changeDigit()">🔢 Change Digit</button>
+    </div>
 
-<div class="narration" id="narration">
-  <span class="step-num">READY</span>
-  Press <strong>Auto Play</strong> to watch the full pipeline, or <strong>Next Step</strong> to advance manually.
-</div>
+    <div class="narration" id="narration">
+        <span class="step-label">READY</span>
+        Press <b>Auto Play</b> to watch the full pipeline, or <b>Next Step</b> to advance one block at a time.
+    </div>
 
-<div class="pipeline" id="pipeline">
-  <!-- Stage 0: Input -->
-  <div class="stage s-input" id="stage0">
-    <div class="stage-header"><span class="stage-icon">📷</span> STAGE 1</div>
-    <div class="stage-title">Event Camera</div>
-    <div class="stage-desc">Raw N-MNIST spikes arrive. Each cell is a pixel that either spiked (lit) or didn't.</div>
-    <div class="spike-grid" id="grid0"></div>
-    <div class="stat-bar">Spikes: <span class="stat-val" id="stat0">—</span></div>
-  </div>
+    <div class="stage-container" id="stages"></div>
 
-  <div class="arrow" id="arr0">→</div>
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-dot c-spike"></div> Input Spike
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot c-noise"></div> Noise
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot c-reject"></div> Rejected
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot c-feat"></div> Feature Activation
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot c-weight"></div> Weight Fetched
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot c-mac"></div> MAC Output
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot c-fire"></div> Neuron Fired
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot c-conf"></div> Confident Class
+        </div>
+    </div>
 
-  <!-- Stage 1: Gatekeeper -->
-  <div class="stage s-gate" id="stage1">
-    <div class="stage-header"><span class="stage-icon">🚧</span> STAGE 2</div>
-    <div class="stage-title">Gatekeeper</div>
-    <div class="stage-desc">Filters noise and redundant bursts. Only "important" spikes pass through.</div>
-    <div class="spike-grid" id="grid1"></div>
-    <div class="stat-bar">Kept: <span class="stat-val" id="stat1">—</span></div>
-  </div>
+    <script>
+        // ---- Hardcoded 16x16 N-MNIST-style digit patterns (spike bitmaps) ----
+        // 1 = spike, 0 = off.  These mimic the event-camera look of digits.
+        const DIGITS = {
+            0: [
+                0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0,
+                0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0,
+                0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
+                0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
+                0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
+                0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
+                0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
+                0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0,
+                0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0,
+                0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+            ],
+            3: [
+                0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+                0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0,
+                0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0,
+            ],
+            5: [
+                0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0,
+                0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0,
+                0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0,
+            ],
+            7: [
+                0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0,
+                0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ],
+            9: [
+                0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0,
+                0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ],
+        };
 
-  <div class="arrow" id="arr1">→</div>
+        const DIGIT_KEYS = Object.keys(DIGITS).map(Number);
+        let currentDigitIdx = 3; // start with "7"
+        let currentDigit = DIGIT_KEYS[currentDigitIdx];
+        let currentStep = -1;
+        let autoTimer = null;
 
-  <!-- Stage 2: SRAM -->
-  <div class="stage s-sram" id="stage2">
-    <div class="stage-header"><span class="stage-icon">💾</span> STAGE 3</div>
-    <div class="stage-title">SRAM Fetch</div>
-    <div class="stage-desc">Each surviving spike triggers a weight read from INT8 SRAM memory.</div>
-    <div class="spike-grid" id="grid2"></div>
-    <div class="stat-bar">Reads: <span class="stat-val" id="stat2">—</span></div>
-  </div>
+        // Stage definitions: name, icon, grid size, css class
+        const STAGES = [
+            { name: 'Event Camera', icon: '📷', gridN: 16, cls: 's0', dims: '2 × 28 × 28' },
+            { name: 'Gatekeeper', icon: '🚧', gridN: 16, cls: 's1', dims: '2 × 28 × 28' },
+            { name: 'Conv1 + LIF1', icon: '🧬', gridN: 16, cls: 's2', dims: '32 × 28 × 28' },
+            { name: 'Pool1 → Conv2', icon: '💾', gridN: 8, cls: 's3', dims: '64 × 14 × 14' },
+            { name: 'Pool2 + FC', icon: '✖️', gridN: 4, cls: 's4', dims: '64 × 7 × 7 → 128' },
+            { name: 'Early Exit', icon: '🏁', gridN: 2, cls: 's5', dims: '10 classes' },
+        ];
 
-  <div class="arrow" id="arr2">→</div>
+        // Noise indices (adds random noise to the spike image)
+        let noiseMap = [];
+        let gatedImage = [];
+        let featImage8 = [];
+        let featImage4 = [];
 
-  <!-- Stage 3: MAC -->
-  <div class="stage s-mac" id="stage3">
-    <div class="stage-header"><span class="stage-icon">✖️</span> STAGE 4</div>
-    <div class="stage-title">Sparse MAC</div>
-    <div class="stage-desc">Multiply spike × weight and accumulate. Zero-spike = zero-MAC (skipped!).</div>
-    <div class="spike-grid" id="grid3"></div>
-    <div class="stat-bar">MACs: <span class="stat-val" id="stat3">—</span></div>
-  </div>
+        function buildStages() {
+            const container = document.getElementById('stages');
+            container.innerHTML = '';
+            STAGES.forEach((s, i) => {
+                if (i > 0) {
+                    const arrow = document.createElement('div');
+                    arrow.className = 'arrow-sep';
+                    arrow.id = 'arr' + (i - 1);
+                    arrow.textContent = '→';
+                    container.appendChild(arrow);
+                }
+                const box = document.createElement('div');
+                box.className = 'stage-box ' + s.cls;
+                box.id = 'stage' + i;
 
-  <div class="arrow" id="arr3">→</div>
+                const cellPx = Math.max(4, Math.floor(120 / s.gridN));
 
-  <!-- Stage 4: LIF -->
-  <div class="stage s-lif" id="stage4">
-    <div class="stage-header"><span class="stage-icon">🧬</span> STAGE 5</div>
-    <div class="stage-title">Adaptive LIF</div>
-    <div class="stage-desc">Membrane potential builds up. If it crosses the threshold → spike! Then threshold rises.</div>
-    <div class="spike-grid" id="grid4"></div>
-    <div class="stat-bar">Fired: <span class="stat-val" id="stat4">—</span></div>
-  </div>
+                box.innerHTML = `
+      <div class="stage-label">${s.icon} STAGE ${i + 1}</div>
+      <div class="stage-name">${s.name}</div>
+      <div class="stage-dims">${s.dims}</div>
+      <div class="spike-grid-wrap">
+        <div class="spike-grid" id="grid${i}" style="grid-template-columns:repeat(${s.gridN},${cellPx}px); grid-template-rows:repeat(${s.gridN},${cellPx}px);"></div>
+      </div>
+      <div class="stat-line" id="stat${i}">—</div>
+    `;
+                container.appendChild(box);
+            });
 
-  <div class="arrow" id="arr4">→</div>
-
-  <!-- Stage 5: Early Exit -->
-  <div class="stage s-exit" id="stage5">
-    <div class="stage-header"><span class="stage-icon">🏁</span> STAGE 6</div>
-    <div class="stage-title">Early Exit FSM</div>
-    <div class="stage-desc">Checks output confidence. If >90%, halt the clock and output the prediction.</div>
-    <div class="spike-grid" id="grid5"></div>
-    <div class="stat-bar">Confidence: <span class="stat-val" id="stat5">—</span></div>
-  </div>
-</div>
-
-<div class="legend">
-  <div class="legend-item"><div class="legend-dot spike-active"></div> Active Spike</div>
-  <div class="legend-item"><div class="legend-dot spike-noise"></div> Noise / Rejected</div>
-  <div class="legend-item"><div class="legend-dot spike-inactive"></div> No Activity</div>
-  <div class="legend-item"><div class="legend-dot spike-weight"></div> Weight Fetched</div>
-  <div class="legend-item"><div class="legend-dot spike-mac"></div> MAC Result</div>
-  <div class="legend-item"><div class="legend-dot spike-fire"></div> Neuron Fired!</div>
-  <div class="legend-item"><div class="legend-dot spike-confident"></div> Confident</div>
-</div>
-
-<script>
-const GRID_SIZE = 64; // 8x8 visualization grid
-let currentStep = -1;
-let autoTimer = null;
-let spikeData = [];
-let noiseIndices = new Set();
-let keptIndices = new Set();
-let weightVals = [];
-let macVals = [];
-let membraneVals = [];
-let firedIndices = new Set();
-
-// Initialize all grids
-function initGrids() {
-  for (let g = 0; g <= 5; g++) {
-    const grid = document.getElementById('grid' + g);
-    grid.innerHTML = '';
-    for (let i = 0; i < GRID_SIZE; i++) {
-      const cell = document.createElement('div');
-      cell.className = 'spike-cell spike-inactive';
-      cell.id = `g${g}c${i}`;
-      grid.appendChild(cell);
-    }
-  }
-}
-
-// Generate random spike pattern
-function generateSpikes() {
-  spikeData = [];
-  noiseIndices = new Set();
-  for (let i = 0; i < GRID_SIZE; i++) {
-    const val = Math.random();
-    if (val < 0.45) {
-      spikeData.push(1); // real spike
-    } else if (val < 0.6) {
-      spikeData.push(1); // noise spike
-      noiseIndices.add(i);
-    } else {
-      spikeData.push(0);
-    }
-  }
-}
-
-// Animation steps
-const steps = [
-  {
-    stage: 0,
-    title: 'STEP 1 — Raw Spikes Arrive',
-    text: 'The event camera captures a frame. Each bright cell is a pixel that detected motion (a spike). Some of these are <strong style="color:#ff6b9d">noise</strong> — random firings that carry no useful information.',
-    action() {
-      generateSpikes();
-      let spikeCount = 0;
-      for (let i = 0; i < GRID_SIZE; i++) {
-        const cell = document.getElementById(`g0c${i}`);
-        if (spikeData[i]) {
-          cell.className = noiseIndices.has(i) ? 'spike-cell spike-noise' : 'spike-cell spike-active';
-          spikeCount++;
-          cell.style.animationDelay = (i * 15) + 'ms';
-        } else {
-          cell.className = 'spike-cell spike-inactive';
+            // Fill grids with empty cells
+            STAGES.forEach((s, i) => {
+                const grid = document.getElementById('grid' + i);
+                const n = s.gridN * s.gridN;
+                for (let c = 0; c < n; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'spike-cell c-off';
+                    cell.id = `g${i}c${c}`;
+                    grid.appendChild(cell);
+                }
+            });
         }
-      }
-      document.getElementById('stat0').textContent = spikeCount + '/' + GRID_SIZE;
-    }
-  },
-  {
-    stage: 1,
-    title: 'STEP 2 — Gatekeeper Filters',
-    text: 'The <strong style="color:#ff6b9d">Dynamic Gatekeeper</strong> examines each spike. It <em>rejects</em> noise (dim red) and redundant bursts. Only "important" spikes (bright cyan) are allowed through to trigger memory reads. This saves ~30% of SRAM fetches!',
-    action() {
-      keptIndices = new Set();
-      let kept = 0, rejected = 0;
-      for (let i = 0; i < GRID_SIZE; i++) {
-        const cell = document.getElementById(`g1c${i}`);
-        if (spikeData[i]) {
-          if (noiseIndices.has(i)) {
-            cell.className = 'spike-cell spike-rejected';
-            rejected++;
-          } else {
-            cell.className = 'spike-cell spike-active';
-            keptIndices.add(i);
-            kept++;
-          }
-        } else {
-          cell.className = 'spike-cell spike-inactive';
+
+        function addNoise(img, noiseRate) {
+            const out = [...img];
+            noiseMap = [];
+            for (let i = 0; i < out.length; i++) {
+                if (out[i] === 0 && Math.random() < noiseRate) {
+                    out[i] = 2; // 2 = noise spike
+                    noiseMap.push(i);
+                }
+            }
+            return out;
         }
-      }
-      const total = kept + rejected;
-      document.getElementById('stat1').textContent = kept + '/' + total + ' (' + Math.round(rejected/Math.max(1,total)*100) + '% rejected)';
-    }
-  },
-  {
-    stage: 2,
-    title: 'STEP 3 — SRAM Weight Fetch',
-    text: 'For each spike that <em>survived</em> the gatekeeper, the hardware fetches the corresponding <strong style="color:#ffb74d">INT8 weight</strong> from SRAM. Dark cells = no fetch needed (zero spike = zero read). This is where the gatekeeper saves real energy!',
-    action() {
-      weightVals = [];
-      let reads = 0;
-      for (let i = 0; i < GRID_SIZE; i++) {
-        const cell = document.getElementById(`g2c${i}`);
-        if (keptIndices.has(i)) {
-          cell.className = 'spike-cell spike-weight';
-          weightVals.push(Math.floor(Math.random() * 255) - 127);
-          reads++;
-        } else {
-          cell.className = 'spike-cell spike-inactive';
-          weightVals.push(0);
+
+        // Downsample 16x16 → 8x8 via 2x2 average pooling
+        function pool2x2(img, fromN) {
+            const toN = fromN / 2;
+            const out = [];
+            for (let r = 0; r < toN; r++) {
+                for (let c = 0; c < toN; c++) {
+                    const sum = img[r * 2 * fromN + c * 2] + img[r * 2 * fromN + c * 2 + 1] +
+                        img[(r * 2 + 1) * fromN + c * 2] + img[(r * 2 + 1) * fromN + c * 2 + 1];
+                    out.push(sum > 0 ? sum : 0);
+                }
+            }
+            return out;
         }
-      }
-      document.getElementById('stat2').textContent = reads + ' reads (saved ' + (spikeData.filter(v=>v).length - reads) + ')';
-    }
-  },
-  {
-    stage: 3,
-    title: 'STEP 4 — Sparse MAC Compute',
-    text: 'The <strong style="color:#b8a5ff">Sparse MAC unit</strong> multiplies each spike (1) × its weight, and accumulates the results. Since rejected spikes are already zeroed, those MAC operations are <em>completely skipped</em> — the multiplier is clock-gated off.',
-    action() {
-      macVals = [];
-      let macCount = 0;
-      for (let i = 0; i < GRID_SIZE; i++) {
-        const cell = document.getElementById(`g3c${i}`);
-        if (keptIndices.has(i)) {
-          const result = weightVals[i]; // spike (1) × weight
-          macVals.push(result);
-          cell.className = 'spike-cell spike-mac';
-          macCount++;
-        } else {
-          macVals.push(0);
-          cell.className = 'spike-cell spike-inactive';
+
+        // Simulate conv + LIF: keep strong features from the digit, add some edge features
+        function convLIF(img, gridN) {
+            const out = [];
+            for (let r = 0; r < gridN; r++) {
+                for (let c = 0; c < gridN; c++) {
+                    const idx = r * gridN + c;
+                    // Sum 3x3 neighborhood
+                    let sum = 0;
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            const rr = r + dr, cc = c + dc;
+                            if (rr >= 0 && rr < gridN && cc >= 0 && cc < gridN) {
+                                const v = img[rr * gridN + cc];
+                                sum += (v > 0 ? 1 : 0);
+                            }
+                        }
+                    }
+                    // LIF threshold: fire if enough neighbors are active
+                    if (sum >= 2) out.push(sum);
+                    else out.push(0);
+                }
+            }
+            return out;
         }
-      }
-      document.getElementById('stat3').textContent = macCount + ' ops (' + (GRID_SIZE - macCount) + ' skipped)';
-    }
-  },
-  {
-    stage: 4,
-    title: 'STEP 5 — Adaptive LIF Neuron',
-    text: 'MAC results are added to the neuron\'s <strong style="color:#00e676">membrane potential</strong>. If it crosses the threshold → the neuron <strong style="color:#fff">fires a spike</strong> (bright white). After firing, the threshold <em>increases</em> to prevent spike storms.',
-    action() {
-      membraneVals = [];
-      firedIndices = new Set();
-      let fired = 0;
-      // Simulate 16 output neurons from 64 inputs
-      for (let i = 0; i < GRID_SIZE; i++) {
-        // Each output neuron integrates ~4 input MACs
-        let sum = 0;
-        for (let j = 0; j < 4; j++) {
-          const idx = (i * 4 + j) % GRID_SIZE;
-          sum += macVals[idx];
+
+        const stepDefs = [
+            // Step 0: Raw spikes
+            {
+                stage: 0,
+                title: 'STEP 1 — Raw N-MNIST Spikes Arrive',
+                text: 'The event camera captures a digit "<b id="digitLabel">7</b>". Cyan cells are real spike events. <b style="color:#ff6b9d">Pink cells are sensor noise</b> — random firings that carry no information.',
+                run() {
+                    const raw = addNoise(DIGITS[currentDigit], 0.12);
+                    let spikes = 0, noise = 0;
+                    for (let i = 0; i < 256; i++) {
+                        const cell = document.getElementById('g0c' + i);
+                        if (raw[i] === 2) { cell.className = 'spike-cell c-noise'; noise++; }
+                        else if (raw[i] === 1) { cell.className = 'spike-cell c-spike'; spikes++; }
+                        else cell.className = 'spike-cell c-off';
+                    }
+                    gatedImage = raw;
+                    document.getElementById('stat0').textContent = `${spikes} spikes + ${noise} noise = ${spikes + noise} events`;
+                }
+            },
+            // Step 1: Gatekeeper filters noise
+            {
+                stage: 1,
+                title: 'STEP 2 — Dynamic Gatekeeper Filters',
+                text: 'The <b style="color:#ff6b9d">Gatekeeper</b> blocks noise and redundant bursts. Noise events (dark red = rejected) are stopped <em>before</em> they trigger any SRAM reads. Only clean spikes (cyan) pass through.',
+                run() {
+                    let kept = 0, rejected = 0;
+                    const filtered = [];
+                    for (let i = 0; i < 256; i++) {
+                        const cell = document.getElementById('g1c' + i);
+                        if (gatedImage[i] === 2) {
+                            cell.className = 'spike-cell c-reject';
+                            filtered.push(0);
+                            rejected++;
+                        } else if (gatedImage[i] === 1) {
+                            cell.className = 'spike-cell c-spike';
+                            filtered.push(1);
+                            kept++;
+                        } else {
+                            cell.className = 'spike-cell c-off';
+                            filtered.push(0);
+                        }
+                    }
+                    gatedImage = filtered;
+                    const pct = Math.round(rejected / Math.max(1, kept + rejected) * 100);
+                    document.getElementById('stat1').textContent = `Kept ${kept}, rejected ${rejected} (${pct}% filtered)`;
+                }
+            },
+            // Step 2: Conv1 + BN + LIF (features emerge, same spatial)
+            {
+                stage: 2,
+                title: 'STEP 3 — Conv1 + BatchNorm + LIF1 (Feature Extraction)',
+                text: 'The 5×5 convolution extracts <b style="color:#00e676">spatial features</b> from the filtered spikes. BatchNorm normalizes before the LIF neuron decides which features are strong enough to fire. The digit shape is now encoded as feature activations.',
+                run() {
+                    const feat = convLIF(gatedImage, 16);
+                    let active = 0;
+                    for (let i = 0; i < 256; i++) {
+                        const cell = document.getElementById('g2c' + i);
+                        if (feat[i] >= 4) { cell.className = 'spike-cell c-feat'; active++; }
+                        else if (feat[i] >= 2) { cell.className = 'spike-cell c-featlo'; active++; }
+                        else cell.className = 'spike-cell c-off';
+                    }
+                    gatedImage = feat.map(v => v >= 2 ? v : 0);
+                    document.getElementById('stat2').textContent = `${active} feature activations (32 channels)`;
+                }
+            },
+            // Step 3: Pool1 + Conv2 (spatial 16→8, like 28→14)
+            {
+                stage: 3,
+                title: 'STEP 4 — AvgPool (28→14) + Conv2 + LIF2 + SRAM Fetch',
+                text: 'AvgPool halves the spatial dimensions. Conv2 extracts deeper features — each surviving spike triggers an <b style="color:#ffb74d">SRAM weight fetch</b> (orange). The digit structure is compressed but recognizable.',
+                run() {
+                    const pooled = pool2x2(gatedImage, 16);
+                    const feat = convLIF(pooled, 8);
+                    featImage8 = feat;
+                    let reads = 0;
+                    for (let i = 0; i < 64; i++) {
+                        const cell = document.getElementById('g3c' + i);
+                        if (feat[i] >= 3) { cell.className = 'spike-cell c-weight'; reads++; }
+                        else if (feat[i] >= 1) { cell.className = 'spike-cell c-wlo'; }
+                        else cell.className = 'spike-cell c-off';
+                    }
+                    document.getElementById('stat3').textContent = `14×14 spatial, ${reads} SRAM reads triggered`;
+                }
+            },
+            // Step 4: Pool2 + FC (spatial 8→4, like 14→7→flatten)
+            {
+                stage: 4,
+                title: 'STEP 5 — Pool2 (14→7) + Flatten + FC1 + Adaptive LIF',
+                text: 'Second pooling compresses to 7×7. Flatten reshapes to 3136 values → FC1 produces 128 neurons. The <b style="color:#b8a5ff">Adaptive LIF</b> fires selectively — bright white = fired, purple = sub-threshold. Neurons that fire too much raise their own threshold.',
+                run() {
+                    const pooled = pool2x2(featImage8, 8);
+                    featImage4 = pooled;
+                    let fired = 0, sub = 0;
+                    for (let i = 0; i < 16; i++) {
+                        const cell = document.getElementById('g4c' + i);
+                        const thresh = 2 + Math.random() * 3; // adaptive threshold varies
+                        if (pooled[i] > thresh) { cell.className = 'spike-cell c-fire'; fired++; }
+                        else if (pooled[i] > 0) { cell.className = 'spike-cell c-mac'; sub++; }
+                        else cell.className = 'spike-cell c-off';
+                    }
+                    document.getElementById('stat4').textContent = `${fired} neurons fired, ${sub} sub-threshold`;
+                }
+            },
+            // Step 5: Early Exit (2x2 = 4 cells representing 10 classes)
+            {
+                stage: 5,
+                title: 'STEP 6 — Early Exit FSM: Classification',
+                text: `The output layer accumulates spike rates across 10 classes. <b style="color:#ffd740">One class dominates</b> — the FSM checks confidence. If >90%, it asserts <code>HALT</code> and outputs digit <b>"${currentDigit}"</b> early, saving all remaining timestep energy!`,
+                run() {
+                    // 4 cells: show dominant class as bright, others dim
+                    for (let i = 0; i < 4; i++) {
+                        const cell = document.getElementById('g5c' + i);
+                        if (i === 0) cell.className = 'spike-cell c-conf'; // dominant class
+                        else cell.className = 'spike-cell c-conflo';
+                    }
+                    const conf = 91 + Math.floor(Math.random() * 8);
+                    document.getElementById('stat5').textContent = `${conf}% → digit "${currentDigit}" ✅ HALT!`;
+                }
+            },
+        ];
+
+        function setNarration(label, html) {
+            document.getElementById('narration').innerHTML = `<span class="step-label">${label}</span>${html}`;
         }
-        membraneVals.push(sum);
-        const cell = document.getElementById(`g4c${i}`);
-        const threshold = 80 + Math.random() * 60; // adaptive threshold varies
-        if (Math.abs(sum) > threshold) {
-          cell.className = 'spike-cell spike-fire';
-          firedIndices.add(i);
-          fired++;
-        } else if (Math.abs(sum) > 20) {
-          cell.className = 'spike-cell spike-membrane';
-        } else {
-          cell.className = 'spike-cell spike-subthresh';
+
+        function activateStage(idx) {
+            STAGES.forEach((_, i) => {
+                const el = document.getElementById('stage' + i);
+                el.classList.remove('active', 'done');
+                if (i < idx) el.classList.add('done');
+                if (i === idx) el.classList.add('active');
+            });
+            for (let i = 0; i < STAGES.length - 1; i++) {
+                document.getElementById('arr' + i).classList.toggle('lit', i < idx);
+            }
         }
-      }
-      document.getElementById('stat4').textContent = fired + '/' + GRID_SIZE + ' neurons fired';
-    }
-  },
-  {
-    stage: 5,
-    title: 'STEP 6 — Early Exit Decision',
-    text: 'The <strong style="color:#ffd740">Early Exit FSM</strong> checks the output layer\'s spike rates. It computes a softmax confidence score. If one class dominates (>90%), the FSM asserts <code>HALT</code> — the entire pipeline stops early, saving all remaining timestep energy!',
-    action() {
-      // Simulate 10 class confidence scores
-      const scores = [];
-      for (let i = 0; i < 10; i++) {
-        scores.push(Math.random() * 0.3);
-      }
-      // Make one class dominant
-      const winner = Math.floor(Math.random() * 10);
-      scores[winner] = 0.85 + Math.random() * 0.12;
-      // Normalize
-      const sum = scores.reduce((a,b) => a+b, 0);
-      const norm = scores.map(s => s/sum);
 
-      for (let i = 0; i < GRID_SIZE; i++) {
-        const cell = document.getElementById(`g5c${i}`);
-        const classIdx = i % 10;
-        if (classIdx === winner && i < 20) {
-          cell.className = 'spike-cell spike-confident';
-        } else if (norm[classIdx] > 0.05) {
-          cell.className = 'spike-cell spike-subthresh';
-        } else {
-          cell.className = 'spike-cell spike-inactive';
+        function nextStep() {
+            currentStep++;
+            if (currentStep >= stepDefs.length) {
+                setNarration('COMPLETE ✅', `Digit <b>"${currentDigit}"</b> classified! In real hardware, this pipeline runs at <b>100 MHz</b> — one timestep per clock cycle. The Gatekeeper + Early Exit saved significant SRAM energy. Press <b>Change Digit</b> to try another, or <b>Reset</b> to replay.`);
+                return;
+            }
+            const s = stepDefs[currentStep];
+            activateStage(s.stage);
+            setNarration(s.title, s.text);
+            s.run();
         }
-      }
-      const conf = Math.round(scores[winner] * 100);
-      document.getElementById('stat5').textContent = conf + '% → digit "' + winner + '" ' + (conf > 90 ? '✅ HALT!' : '⏳ continue...');
-    }
-  }
-];
 
-function setNarration(stepNum, text) {
-  const n = document.getElementById('narration');
-  n.innerHTML = `<span class="step-num">${stepNum}</span>${text}`;
-}
+        function autoPlay() {
+            if (autoTimer) { clearInterval(autoTimer); autoTimer = null; document.getElementById('btnPlay').textContent = '▶ Auto Play'; return; }
+            resetAll();
+            document.getElementById('btnPlay').textContent = '⏸ Pause';
+            autoTimer = setInterval(() => {
+                if (currentStep >= stepDefs.length - 1) {
+                    clearInterval(autoTimer); autoTimer = null;
+                    document.getElementById('btnPlay').textContent = '▶ Auto Play';
+                    setNarration('COMPLETE ✅', `Digit <b>"${currentDigit}"</b> classified! The Gatekeeper + Early Exit saved significant SRAM energy. Press <b>Change Digit</b> to try another.`);
+                    return;
+                }
+                nextStep();
+            }, 3000);
+        }
 
-function activateStage(idx) {
-  for (let i = 0; i <= 5; i++) {
-    const s = document.getElementById('stage' + i);
-    s.classList.remove('active', 'done');
-    if (i < idx) s.classList.add('done');
-    if (i === idx) s.classList.add('active');
-  }
-  for (let i = 0; i < 5; i++) {
-    const a = document.getElementById('arr' + i);
-    a.classList.toggle('active', i < idx);
-  }
-}
+        function changeDigit() {
+            currentDigitIdx = (currentDigitIdx + 1) % DIGIT_KEYS.length;
+            currentDigit = DIGIT_KEYS[currentDigitIdx];
+            // Update step 5 text dynamically
+            stepDefs[5].text = `The output layer accumulates spike rates across 10 classes. <b style="color:#ffd740">One class dominates</b> — the FSM checks confidence. If >90%, it asserts <code>HALT</code> and outputs digit <b>"${currentDigit}"</b> early, saving all remaining timestep energy!`;
+            resetAll();
+            setNarration('DIGIT CHANGED', `Now showing digit <b>"${currentDigit}"</b>. Press <b>Auto Play</b> or <b>Next Step</b> to begin.`);
+        }
 
-function nextStep() {
-  currentStep++;
-  if (currentStep >= steps.length) {
-    setNarration('COMPLETE ✅', 'The spike has traveled the entire pipeline! In a real chip, this whole process happens in <strong>one clock cycle per timestep</strong>. The gatekeeper + early exit saved significant energy. Press <strong>Reset</strong> to see it again with new random data.');
-    return;
-  }
-  const step = steps[currentStep];
-  activateStage(step.stage);
-  setNarration(step.title, step.text);
-  step.action();
-}
+        function resetAll() {
+            if (autoTimer) { clearInterval(autoTimer); autoTimer = null; document.getElementById('btnPlay').textContent = '▶ Auto Play'; }
+            currentStep = -1;
+            STAGES.forEach((s, i) => {
+                const n = s.gridN * s.gridN;
+                for (let c = 0; c < n; c++) {
+                    document.getElementById(`g${i}c${c}`).className = 'spike-cell c-off';
+                }
+                document.getElementById('stage' + i).classList.remove('active', 'done');
+                document.getElementById('stat' + i).textContent = '—';
+            });
+            for (let i = 0; i < STAGES.length - 1; i++) document.getElementById('arr' + i).classList.remove('lit');
+            setNarration('READY', 'Press <b>Auto Play</b> to watch the full pipeline, or <b>Next Step</b> to advance one block at a time.');
+        }
 
-function autoPlay() {
-  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; document.getElementById('btnPlay').textContent = '▶ Auto Play'; return; }
-  document.getElementById('btnPlay').textContent = '⏸ Pause';
-  resetAll();
-  autoTimer = setInterval(() => {
-    if (currentStep >= steps.length - 1) {
-      clearInterval(autoTimer); autoTimer = null;
-      document.getElementById('btnPlay').textContent = '▶ Auto Play';
-      setNarration('COMPLETE ✅', 'The spike has traveled the entire pipeline! In a real chip, this whole process happens in <strong>one clock cycle per timestep</strong>. The gatekeeper + early exit saved significant energy. Press <strong>Reset</strong> to watch again with new random data.');
-      return;
-    }
-    nextStep();
-  }, 2500);
-}
-
-function resetAll() {
-  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; document.getElementById('btnPlay').textContent = '▶ Auto Play'; }
-  currentStep = -1;
-  initGrids();
-  for (let i = 0; i <= 5; i++) {
-    document.getElementById('stage' + i).classList.remove('active', 'done');
-    if (document.getElementById('stat' + i)) document.getElementById('stat' + i).textContent = '—';
-  }
-  for (let i = 0; i < 5; i++) document.getElementById('arr' + i).classList.remove('active');
-  setNarration('READY', 'Press <strong>Auto Play</strong> to watch the full pipeline, or <strong>Next Step</strong> to advance manually.');
-}
-
-// Init
-initGrids();
-</script>
-
+        buildStages();
+    </script>
 </body>
+
 </html>
