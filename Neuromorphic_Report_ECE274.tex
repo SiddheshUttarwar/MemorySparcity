@@ -95,6 +95,43 @@ The baseline network is a convolutional SNN with Leaky Integrate-and-Fire (LIF) 
 \label{fig:architecture}
 \end{figure}
 
+\begin{table*}[t]
+\caption{LeNet5 Sparse CSNN -- Structural Details (Per Time Step, Shared Weights)}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3.2pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c c c|c c c|c|c|c|c c|c|c|c|}
+\hline
+\multicolumn{3}{|c|}{\textbf{Input}} & \multicolumn{3}{c|}{\textbf{Output}} & \textbf{Layer} & \textbf{Stride} & \textbf{Pad} & \multicolumn{2}{c|}{\textbf{Kernel}} & \textbf{in} & \textbf{out} & \textbf{\# Param} \\
+\hline
+\textbf{H} & \textbf{W} & \textbf{C} & \textbf{H} & \textbf{W} & \textbf{C} & & & & \textbf{H} & \textbf{W} & & & \\
+\hline
+28 & 28 & 2 & 28 & 28 & 32 & conv1    & 1 & 2 & 5 & 5 & 2    & 32  & 1,600   \\
+28 & 28 & 32 & 28 & 28 & 32 & bn1      & - & - & - & - & 32   & 32  & 64      \\
+28 & 28 & 32 & 28 & 28 & 32 & lif1     & 1 & - & - & - & 32   & 32  & 0       \\
+28 & 28 & 32 & 14 & 14 & 32 & avgpool1 & 2 & 0 & 2 & 2 & 32   & 32  & 0       \\
+14 & 14 & 32 & 14 & 14 & 64 & conv2    & 1 & 2 & 5 & 5 & 32   & 64  & 51,200  \\
+14 & 14 & 64 & 14 & 14 & 64 & bn2      & - & - & - & - & 64   & 64  & 128     \\
+14 & 14 & 64 & 14 & 14 & 64 & lif2     & 1 & - & - & - & 64   & 64  & 0       \\
+14 & 14 & 64 & 7  & 7  & 64 & avgpool2 & 2 & 0 & 2 & 2 & 64   & 64  & 0       \\
+7  & 7  & 64 & 1  & 1  & 3136 & flatten & - & - & - & - & 3136 & 3136 & 0    \\
+1  & 1  & 3136 & 1  & 1  & 3136 & dropout & - & - & - & - & 3136 & 3136 & 0 \\
+1  & 1  & 3136 & 1  & 1  & 128 & fc1     & - & - & 1 & 1 & 3136 & 128 & 401,408 \\
+1  & 1  & 128 & 1  & 1  & 128 & lif3     & 1 & - & - & - & 128  & 128 & 0       \\
+1  & 1  & 128 & 1  & 1  & 10  & fc2      & - & - & 1 & 1 & 128  & 10  & 1,280   \\
+1  & 1  & 10  & 1  & 1  & 10  & lif4     & 1 & - & - & - & 10   & 10  & 0       \\
+\hline
+\multicolumn{13}{|r|}{\textbf{Total Trainable Parameters}} & \textbf{455,680} \\
+\hline
+\multicolumn{14}{|l|}{\textit{Note: This block is reused across time bins ($T$), which appears as recursive entries in torchinfo.}} \\
+\hline
+\end{tabular}
+}
+\label{tab:lenet_struct}
+\normalsize
+\end{table*}
+
 \subsection{LIF Dynamics}
 The membrane update at step $t$ is
 \begin{equation}
