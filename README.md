@@ -196,3 +196,4 @@ python export_weights_mem.py    # Export weights for Verilog
 ## 📄 Authors
 
 - **Siddhesh Uttarwar** — University of California, Santa Barbara (suttarwar@ucsb.edu)
+- **Parth Kulkarni** — University of California, Santa Barbara (parthkulkarni@ucsb.edu)
