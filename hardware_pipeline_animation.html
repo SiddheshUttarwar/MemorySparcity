@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sparse SNN — Temporal Spike Pipeline Animation</title>
+    <title>Sparse vs Baseline SNN — Temporal Spike Pipeline</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
@@ -23,11 +23,11 @@
 
         .header {
             text-align: center;
-            padding: 20px 16px 6px
+            padding: 18px 16px 4px
         }
 
         .header h1 {
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             background: linear-gradient(135deg, #00d4ff, #7b61ff, #ff6b9d);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent
@@ -35,68 +35,65 @@
 
         .header p {
             color: #8892a8;
-            font-size: 0.8rem;
+            font-size: 0.78rem;
             margin-top: 3px
         }
 
-        /* Timeline */
         .timeline {
-            max-width: 860px;
-            margin: 10px auto;
+            max-width: 880px;
+            margin: 8px auto;
             padding: 0 20px
         }
 
-        .timeline-label {
+        .tl-label {
             display: flex;
             justify-content: space-between;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.65rem;
+            font-size: 0.6rem;
             color: #5a6380;
             margin-bottom: 2px
         }
 
-        .timeline-bar {
+        .tl-bar {
             display: flex;
             gap: 2px;
-            height: 22px;
-            border-radius: 6px;
-            overflow: hidden
+            height: 20px
         }
 
-        .t-cell {
+        .tc {
             flex: 1;
             border-radius: 3px;
             transition: all 0.3s;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.55rem;
+            font-size: 0.5rem;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer
         }
 
-        .t-cell.future {
+        .tc.future {
             background: #141a2e;
             color: #2a3050
         }
 
-        .t-cell.current {
+        .tc.current {
             background: linear-gradient(135deg, #00d4ff, #7b61ff);
             color: #fff;
-            box-shadow: 0 0 10px rgba(0, 212, 255, 0.4)
+            box-shadow: 0 0 8px rgba(0, 212, 255, 0.3)
         }
 
-        .t-cell.past {
+        .tc.past {
             background: #1a2545;
             color: #5a7aaa
         }
 
-        .t-cell.halted {
+        .tc.halted {
             background: #2a1a15;
             color: #ff6b4a
         }
 
-        .t-cell.exit-t {
+        .tc.exit-t {
             background: #1a3520;
             color: #00e676;
             font-weight: 700
@@ -106,17 +103,17 @@
             display: flex;
             justify-content: center;
             gap: 8px;
-            padding: 10px;
+            padding: 8px;
             flex-wrap: wrap
         }
 
         .controls button {
             font-family: 'Inter', sans-serif;
             font-weight: 600;
-            font-size: 0.78rem;
-            padding: 8px 18px;
+            font-size: 0.75rem;
+            padding: 7px 16px;
             border: none;
-            border-radius: 7px;
+            border-radius: 6px;
             cursor: pointer;
             transition: all 0.2s
         }
@@ -128,13 +125,13 @@
 
         .btn-play:hover {
             transform: scale(1.04);
-            box-shadow: 0 0 14px rgba(0, 212, 255, 0.4)
+            box-shadow: 0 0 12px rgba(0, 212, 255, 0.3)
         }
 
         .btn-step {
             background: rgba(123, 97, 255, 0.2);
             color: #b8a5ff;
-            border: 1px solid rgba(123, 97, 255, 0.35) !important
+            border: 1px solid rgba(123, 97, 255, 0.3) !important
         }
 
         .btn-reset {
@@ -146,299 +143,373 @@
         .btn-digit {
             background: rgba(0, 212, 255, 0.12);
             color: #00d4ff;
-            border: 1px solid rgba(0, 212, 255, 0.25) !important
+            border: 1px solid rgba(0, 212, 255, 0.2) !important
         }
 
-        /* Pipeline row */
-        .pipeline {
+        /* Dual pipeline layout */
+        .dual {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 12px
+        }
+
+        .row-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 6px 8px;
+            margin-top: 6px;
+            border-radius: 6px 6px 0 0;
             display: flex;
-            justify-content: center;
+            align-items: center;
+            gap: 6px
+        }
+
+        .row-label .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%
+        }
+
+        .rl-baseline {
+            background: rgba(255, 107, 157, 0.08);
+            border: 1px solid rgba(255, 107, 157, 0.15);
+            border-bottom: none;
+            color: #ff6b9d
+        }
+
+        .rl-sparse {
+            background: rgba(0, 212, 255, 0.08);
+            border: 1px solid rgba(0, 212, 255, 0.15);
+            border-bottom: none;
+            color: #00d4ff
+        }
+
+        .pipe-row {
+            display: flex;
             align-items: flex-start;
             gap: 0;
-            padding: 8px 10px;
-            flex-wrap: wrap
+            padding: 8px;
+            border-radius: 0 0 6px 6px;
+            flex-wrap: nowrap;
+            overflow-x: auto
+        }
+
+        .pr-baseline {
+            background: rgba(255, 107, 157, 0.03);
+            border: 1px solid rgba(255, 107, 157, 0.1);
+            border-top: none
+        }
+
+        .pr-sparse {
+            background: rgba(0, 212, 255, 0.03);
+            border: 1px solid rgba(0, 212, 255, 0.1);
+            border-top: none
         }
 
         .stage {
             flex: 0 0 auto;
-            border-radius: 10px;
-            padding: 10px;
+            border-radius: 8px;
+            padding: 6px;
             text-align: center;
             opacity: 0.3;
-            transform: scale(0.92);
-            transition: all 0.4s;
-            min-width: 110px
+            transition: all 0.3s;
+            min-width: 82px
         }
 
-        .stage.active {
-            opacity: 1;
-            transform: scale(1)
+        .stage.on {
+            opacity: 1
         }
 
-        .stage.done {
-            opacity: 0.6;
-            transform: scale(0.95)
-        }
-
-        .stg-hdr {
+        .sh {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.58rem;
+            font-size: 0.52rem;
             text-transform: uppercase;
-            letter-spacing: 0.7px;
-            margin-bottom: 2px
-        }
-
-        .stg-name {
-            font-size: 0.78rem;
-            font-weight: 700;
+            letter-spacing: 0.5px;
             margin-bottom: 1px
         }
 
-        .stg-dims {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.55rem;
-            color: #8892a8;
-            margin-bottom: 5px
+        .sn {
+            font-size: 0.68rem;
+            font-weight: 700;
+            margin-bottom: 3px
         }
 
-        .spike-grid {
+        .sg {
             display: grid;
             gap: 1px;
-            margin: 0 auto 5px
+            margin: 0 auto 3px
         }
 
         .sc {
             width: 100%;
             aspect-ratio: 1;
             border-radius: 1px;
-            transition: background 0.25s, box-shadow 0.25s
+            transition: background 0.2s
         }
 
-        .stat-box {
+        .sb {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.58rem;
-            padding: 3px 5px;
-            border-radius: 4px;
-            background: rgba(0, 0, 0, 0.3);
-            margin-top: 3px
+            font-size: 0.52rem;
+            padding: 2px 4px;
+            border-radius: 3px;
+            background: rgba(0, 0, 0, 0.25)
         }
 
         .arrow {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.1rem;
+            font-size: 0.9rem;
             color: #1e2540;
-            flex: 0 0 20px;
-            transition: color 0.3s;
-            padding-top: 40px
+            flex: 0 0 14px;
+            padding-top: 30px;
+            transition: color 0.3s
         }
 
         .arrow.lit {
             color: #00d4ff;
-            text-shadow: 0 0 6px rgba(0, 212, 255, 0.4)
+            text-shadow: 0 0 4px rgba(0, 212, 255, 0.3)
         }
 
-        /* Stage colors */
-        .s0 {
-            background: linear-gradient(145deg, rgba(0, 212, 255, 0.08), rgba(0, 212, 255, 0.02));
-            border: 1px solid rgba(0, 212, 255, 0.18)
+        .arrow.litb {
+            color: #ff6b9d;
+            text-shadow: 0 0 4px rgba(255, 107, 157, 0.3)
         }
 
-        .s0 .stg-hdr {
+        /* Stage bg */
+        .si {
+            background: rgba(0, 212, 255, 0.06);
+            border: 1px solid rgba(0, 212, 255, 0.12)
+        }
+
+        .si .sh {
             color: #00d4ff
         }
 
-        .s1 {
-            background: linear-gradient(145deg, rgba(255, 107, 157, 0.08), rgba(255, 107, 157, 0.02));
-            border: 1px solid rgba(255, 107, 157, 0.18)
+        .sg2 {
+            background: rgba(255, 107, 157, 0.06);
+            border: 1px solid rgba(255, 107, 157, 0.12)
         }
 
-        .s1 .stg-hdr {
+        .sg2 .sh {
             color: #ff6b9d
         }
 
-        .s2 {
-            background: linear-gradient(145deg, rgba(0, 230, 118, 0.08), rgba(0, 230, 118, 0.02));
-            border: 1px solid rgba(0, 230, 118, 0.18)
+        .sf {
+            background: rgba(0, 230, 118, 0.06);
+            border: 1px solid rgba(0, 230, 118, 0.12)
         }
 
-        .s2 .stg-hdr {
+        .sf .sh {
             color: #00e676
         }
 
-        .s3 {
-            background: linear-gradient(145deg, rgba(255, 183, 77, 0.08), rgba(255, 183, 77, 0.02));
-            border: 1px solid rgba(255, 183, 77, 0.18)
+        .sw {
+            background: rgba(255, 183, 77, 0.06);
+            border: 1px solid rgba(255, 183, 77, 0.12)
         }
 
-        .s3 .stg-hdr {
+        .sw .sh {
             color: #ffb74d
         }
 
-        .s4 {
-            background: linear-gradient(145deg, rgba(123, 97, 255, 0.08), rgba(123, 97, 255, 0.02));
-            border: 1px solid rgba(123, 97, 255, 0.18)
+        .sm {
+            background: rgba(123, 97, 255, 0.06);
+            border: 1px solid rgba(123, 97, 255, 0.12)
         }
 
-        .s4 .stg-hdr {
+        .sm .sh {
             color: #b8a5ff
         }
 
-        .s5 {
-            background: linear-gradient(145deg, rgba(255, 215, 0, 0.08), rgba(255, 215, 0, 0.02));
-            border: 1px solid rgba(255, 215, 0, 0.18)
+        .se {
+            background: rgba(255, 215, 0, 0.06);
+            border: 1px solid rgba(255, 215, 0, 0.12)
         }
 
-        .s5 .stg-hdr {
+        .se .sh {
             color: #ffd740
         }
 
-        /* Cell colors */
         .c-off {
             background: #0e1325
         }
 
-        .c-spike {
+        .c-sp {
             background: #00d4ff;
-            box-shadow: 0 0 2px rgba(0, 212, 255, 0.5)
+            box-shadow: 0 0 2px rgba(0, 212, 255, 0.4)
         }
 
-        .c-noise {
+        .c-no {
             background: #ff6b9d;
-            box-shadow: 0 0 2px rgba(255, 107, 157, 0.4)
+            box-shadow: 0 0 2px rgba(255, 107, 157, 0.3)
         }
 
-        .c-rej {
+        .c-rj {
             background: #2a1020
         }
 
-        .c-feat {
+        .c-ft {
             background: #00e676;
-            box-shadow: 0 0 2px rgba(0, 230, 118, 0.4)
+            box-shadow: 0 0 2px rgba(0, 230, 118, 0.3)
         }
 
-        .c-featlo {
+        .c-fl {
             background: #0a3318
         }
 
         .c-wt {
             background: #ffb74d;
-            box-shadow: 0 0 2px rgba(255, 183, 77, 0.4)
+            box-shadow: 0 0 2px rgba(255, 183, 77, 0.3)
         }
 
-        .c-wlo {
+        .c-wl {
             background: #3d2a0e
         }
 
-        .c-mac {
+        .c-mc {
             background: #b8a5ff;
-            box-shadow: 0 0 2px rgba(123, 97, 255, 0.4)
+            box-shadow: 0 0 2px rgba(123, 97, 255, 0.3)
         }
 
-        .c-maclo {
+        .c-ml {
             background: #1e1540
         }
 
-        .c-fire {
+        .c-fr {
             background: #fff;
-            box-shadow: 0 0 6px rgba(255, 255, 255, 0.7)
+            box-shadow: 0 0 4px rgba(255, 255, 255, 0.5)
         }
 
-        .c-sub {
+        .c-sb {
             background: #0d3520
         }
 
-        .c-conf {
+        .c-cf {
             background: #ffd740;
-            box-shadow: 0 0 3px rgba(255, 215, 0, 0.5)
+            box-shadow: 0 0 3px rgba(255, 215, 0, 0.4)
         }
 
-        .c-conflo {
+        .c-cl {
             background: #3d3510
         }
 
-        /* Metrics panel */
-        .metrics {
-            max-width: 860px;
-            margin: 8px auto;
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
-            padding: 0 20px
+        /* Baseline red tint versions */
+        .c-bsp {
+            background: #ff8fa8;
+            box-shadow: 0 0 2px rgba(255, 107, 157, 0.4)
         }
 
-        .metric-card {
+        .c-bft {
+            background: #ffab76;
+            box-shadow: 0 0 2px rgba(255, 171, 118, 0.3)
+        }
+
+        .c-bfl {
+            background: #3d2a18
+        }
+
+        .c-bwt {
+            background: #ffa07a;
+            box-shadow: 0 0 2px rgba(255, 160, 122, 0.3)
+        }
+
+        .c-bfr {
+            background: #ffcccc;
+            box-shadow: 0 0 4px rgba(255, 200, 200, 0.4)
+        }
+
+        .c-bsb {
+            background: #2a1a18
+        }
+
+        /* Metrics row */
+        .metrics {
+            max-width: 900px;
+            margin: 6px auto;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            padding: 0 12px
+        }
+
+        .mc {
             background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 8px;
-            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            padding: 6px;
             text-align: center
         }
 
-        .metric-label {
-            font-size: 0.65rem;
+        .ml {
+            font-size: 0.6rem;
             color: #8892a8;
-            margin-bottom: 3px
+            margin-bottom: 1px
         }
 
-        .metric-val {
+        .mv {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 1.1rem;
+            font-size: 0.9rem;
             font-weight: 700
         }
 
-        .metric-sub {
-            font-size: 0.6rem;
+        .ms {
+            font-size: 0.55rem;
             color: #5a6380;
-            margin-top: 2px
+            margin-top: 1px
         }
 
-        .m-cyan .metric-val {
-            color: #00d4ff
-        }
-
-        .m-pink .metric-val {
+        .m1 .mv {
             color: #ff6b9d
         }
 
-        .m-green .metric-val {
+        .m2 .mv {
+            color: #00d4ff
+        }
+
+        .m3 .mv {
             color: #00e676
         }
 
-        .m-gold .metric-val {
+        .m4 .mv {
             color: #ffd740
         }
 
-        /* Confidence bar */
-        .conf-wrap {
-            max-width: 860px;
-            margin: 6px auto;
-            padding: 0 20px
+        /* Confidence bars */
+        .conf-area {
+            max-width: 900px;
+            margin: 4px auto;
+            padding: 0 12px
         }
 
-        .conf-label {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.6rem;
-            color: #8892a8;
-            margin-bottom: 2px;
+        .conf-row {
             display: flex;
-            justify-content: space-between
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px
+        }
+
+        .conf-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.55rem;
+            width: 60px;
+            text-align: right
         }
 
         .conf-track {
-            height: 14px;
+            flex: 1;
+            height: 12px;
             background: #141a2e;
-            border-radius: 7px;
+            border-radius: 6px;
             overflow: hidden;
             position: relative
         }
 
         .conf-fill {
             height: 100%;
-            border-radius: 7px;
-            transition: width 0.4s, background 0.4s;
-            background: linear-gradient(90deg, #7b61ff, #00d4ff)
+            border-radius: 6px;
+            transition: width 0.3s
         }
 
         .conf-thresh {
@@ -450,36 +521,69 @@
             left: 90%
         }
 
+        .conf-pct {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.55rem;
+            width: 35px
+        }
+
         .narration {
-            max-width: 860px;
-            margin: 8px auto;
-            padding: 12px 18px;
-            border-radius: 8px;
-            background: rgba(123, 97, 255, 0.06);
-            border: 1px solid rgba(123, 97, 255, 0.15);
-            font-size: 0.82rem;
-            line-height: 1.5;
+            max-width: 900px;
+            margin: 6px auto;
+            padding: 10px 16px;
+            border-radius: 6px;
+            background: rgba(123, 97, 255, 0.05);
+            border: 1px solid rgba(123, 97, 255, 0.12);
+            font-size: 0.78rem;
+            line-height: 1.45;
             text-align: center;
-            min-height: 40px
+            min-height: 32px
+        }
+
+        /* Graph */
+        .graph-area {
+            max-width: 900px;
+            margin: 10px auto;
+            padding: 0 12px;
+            display: none
+        }
+
+        .graph-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 6px;
+            color: #e0e6f0
+        }
+
+        canvas {
+            width: 100%;
+            border-radius: 8px;
+            background: #0e1325;
+            border: 1px solid rgba(255, 255, 255, 0.06)
+        }
+
+        .graph-legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 6px;
+            font-size: 0.7rem
+        }
+
+        .gl-item {
+            display: flex;
+            align-items: center;
+            gap: 4px
+        }
+
+        .gl-dot {
+            width: 12px;
+            height: 3px;
+            border-radius: 2px
         }
 
         @media(max-width:700px) {
-            .pipeline {
-                flex-direction: column;
-                align-items: center
-            }
-
-            .arrow {
-                transform: rotate(90deg);
-                padding-top: 0;
-                flex: 0 0 14px
-            }
-
-            .stage {
-                width: 90%;
-                max-width: 280px
-            }
-
             .metrics {
                 grid-template-columns: repeat(2, 1fr)
             }
@@ -490,14 +594,14 @@
 <body>
 
     <div class="header">
-        <h1>⚡ Temporal Spike Pipeline — T=1 to T=20</h1>
-        <p>Watch spike data evolve across time steps, membrane potential build up, and early exit trigger</p>
+        <h1>⚡ Baseline vs Sparse SNN — Side-by-Side</h1>
+        <p>Compare how the baseline (no optimizations) and sparse (gatekeeper + early exit) SNNs process the same digit
+            across time</p>
     </div>
 
-    <!-- Timeline -->
     <div class="timeline">
-        <div class="timeline-label"><span>T=1</span><span>Timesteps →</span><span>T=20</span></div>
-        <div class="timeline-bar" id="timeline"></div>
+        <div class="tl-label"><span>T=1</span><span>Timesteps →</span><span>T=20</span></div>
+        <div class="tl-bar" id="tl"></div>
     </div>
 
     <div class="controls">
@@ -507,53 +611,86 @@
         <button class="btn-digit" onclick="cycleDigit()">🔢 Change Digit</button>
     </div>
 
-    <!-- Cumulative metrics -->
     <div class="metrics">
-        <div class="metric-card m-cyan">
-            <div class="metric-label">Timestep</div>
-            <div class="metric-val" id="mTime">—</div>
-            <div class="metric-sub">of 20 max</div>
+        <div class="mc m1">
+            <div class="ml">Baseline SRAM Reads</div>
+            <div class="mv" id="mBR">0</div>
+            <div class="ms">no gatekeeper, full T=20</div>
         </div>
-        <div class="metric-card m-pink">
-            <div class="metric-label">Cumulative SRAM Reads</div>
-            <div class="metric-val" id="mReads">0</div>
-            <div class="metric-sub" id="mSaved">—</div>
+        <div class="mc m2">
+            <div class="ml">Sparse SRAM Reads</div>
+            <div class="mv" id="mSR">0</div>
+            <div class="ms" id="mSS">with gatekeeper + early exit</div>
         </div>
-        <div class="metric-card m-green">
-            <div class="metric-label">Total Spikes (all layers)</div>
-            <div class="metric-val" id="mSpikes">0</div>
-            <div class="metric-sub" id="mRate">firing rate: —</div>
+        <div class="mc m3">
+            <div class="ml">Reads Saved</div>
+            <div class="mv" id="mSaved">0%</div>
+            <div class="ms" id="mSavedN">—</div>
         </div>
-        <div class="metric-card m-gold">
-            <div class="metric-label">GK Rejected Events</div>
-            <div class="metric-val" id="mRejected">0</div>
-            <div class="metric-sub" id="mRejPct">—</div>
-        </div>
-    </div>
-
-    <!-- Confidence bar -->
-    <div class="conf-wrap">
-        <div class="conf-label"><span>Confidence</span><span id="confPct">0%</span></div>
-        <div class="conf-track">
-            <div class="conf-fill" id="confFill" style="width:0%"></div>
-            <div class="conf-thresh" title="90% exit threshold"></div>
+        <div class="mc m4">
+            <div class="ml">Timestep</div>
+            <div class="mv" id="mT">—</div>
+            <div class="ms" id="mTsub">of 20</div>
         </div>
     </div>
 
-    <!-- Pipeline stages -->
-    <div class="pipeline" id="pipeline"></div>
+    <div class="conf-area">
+        <div class="conf-row">
+            <div class="conf-tag" style="color:#ff6b9d">Baseline</div>
+            <div class="conf-track">
+                <div class="conf-fill" id="cfB" style="width:0%;background:linear-gradient(90deg,#ff6b9d,#ff8fa8)">
+                </div>
+                <div class="conf-thresh"></div>
+            </div>
+            <div class="conf-pct" id="cpB" style="color:#ff6b9d">0%</div>
+        </div>
+        <div class="conf-row">
+            <div class="conf-tag" style="color:#00d4ff">Sparse</div>
+            <div class="conf-track">
+                <div class="conf-fill" id="cfS" style="width:0%;background:linear-gradient(90deg,#7b61ff,#00d4ff)">
+                </div>
+                <div class="conf-thresh"></div>
+            </div>
+            <div class="conf-pct" id="cpS" style="color:#00d4ff">0%</div>
+        </div>
+    </div>
 
-    <div class="narration" id="narration">
-        Press <b>Play</b> to watch the SNN process a digit across 20 timesteps. The pipeline processes one frame per
-        timestep — spikes accumulate, membrane potential builds, and when confidence crosses 90%, the system halts
-        early.
+    <!-- Baseline pipeline -->
+    <div class="dual">
+        <div class="row-label rl-baseline">
+            <div class="dot" style="background:#ff6b9d"></div> Baseline SNN (Dense — No Optimizations)
+        </div>
+        <div class="pipe-row pr-baseline" id="pipeB"></div>
+
+        <div class="row-label rl-sparse">
+            <div class="dot" style="background:#00d4ff"></div> Sparse SNN (Gatekeeper + Early Exit + Adaptive LIF)
+        </div>
+        <div class="pipe-row pr-sparse" id="pipeS"></div>
+    </div>
+
+    <div class="narration" id="narration">Press <b>Play</b> to watch both networks process the same digit
+        simultaneously. The baseline runs all T=20 timesteps with no filtering. The sparse SNN filters noise and can
+        halt early.</div>
+
+    <!-- Graph (shown at end) -->
+    <div class="graph-area" id="graphArea">
+        <div class="graph-title">📊 Cumulative SRAM Reads Over Time</div>
+        <canvas id="chart" height="220"></canvas>
+        <div class="graph-legend">
+            <div class="gl-item">
+                <div class="gl-dot" style="background:#ff6b9d"></div> Baseline (Dense)
+            </div>
+            <div class="gl-item">
+                <div class="gl-dot" style="background:#00d4ff"></div> Sparse (Optimized)
+            </div>
+            <div class="gl-item">
+                <div class="gl-dot" style="background:rgba(255,107,157,0.15)"></div> Savings Area
+            </div>
+        </div>
     </div>
 
     <script>
         const T_MAX = 20;
-        const CELL_PX = 6;
-
-        // 16x16 digit patterns
         const DIGITS = {
             0: [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
             3: [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
@@ -561,260 +698,330 @@
             5: [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
             9: [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         };
-        const DKEYS = Object.keys(DIGITS).map(Number);
-        let dIdx = 2; // start with "7"
-        let digit = DKEYS[dIdx];
+        const DK = Object.keys(DIGITS).map(Number); let dI = 2, digit = DK[dI];
 
         // State
-        let tNow = 0;
-        let playing = false;
-        let timer = null;
-        let halted = false;
-        let exitT = -1;
+        let tNow = 0, playing = false, timer = null, sparseHalted = false, sparseExitT = -1;
+        let bReads = 0, sReads = 0, bConf = 0, sConf = 0;
+        let bReadHist = [], sReadHist = [];
+        let bRejected = 0, sRejected = 0, bRaw = 0, sRaw = 0;
 
-        // Cumulative metrics
-        let cumReads = 0, cumSpikes = 0, cumRejected = 0, cumRaw = 0;
-        let confidence = 0;
-
-        // Per-timestep varying spike pattern (simulate temporal jitter)
-        function getFrameSpikes(t) {
-            const base = DIGITS[digit];
-            const out = new Array(256);
+        function frame(t) {
+            const base = DIGITS[digit], out = [];
             for (let i = 0; i < 256; i++) {
-                if (base[i] === 1) {
-                    // Real spikes arrive with ~80% probability per timestep (temporal jitter)
-                    out[i] = Math.random() < 0.8 ? 1 : 0;
-                } else {
-                    // Noise: ~8% chance per timestep
-                    out[i] = Math.random() < 0.08 ? 2 : 0;
-                }
+                if (base[i]) out[i] = Math.random() < 0.8 ? 1 : 0;
+                else out[i] = Math.random() < 0.08 ? 2 : 0;
             }
             return out;
         }
 
-        function pool(img, n) {
-            const h = n / 2, out = [];
-            for (let r = 0; r < h; r++) for (let c = 0; c < h; c++) {
-                out.push(img[r * 2 * n + c * 2] + img[r * 2 * n + c * 2 + 1] + img[(r * 2 + 1) * n + c * 2] + img[(r * 2 + 1) * n + c * 2 + 1]);
-            }
-            return out;
-        }
-        function conv3x3(img, n) {
-            const out = [];
-            for (let r = 0; r < n; r++)for (let c = 0; c < n; c++) {
-                let s = 0;
-                for (let dr = -1; dr <= 1; dr++)for (let dc = -1; dc <= 1; dc++) {
-                    const rr = r + dr, cc = c + dc;
-                    if (rr >= 0 && rr < n && cc >= 0 && cc < n) s += (img[rr * n + cc] > 0 ? 1 : 0);
-                }
-                out.push(s >= 2 ? s : 0);
-            }
-            return out;
-        }
+        function pool(a, n) { const h = n / 2, o = []; for (let r = 0; r < h; r++)for (let c = 0; c < h; c++)o.push(a[r * 2 * n + c * 2] + a[r * 2 * n + c * 2 + 1] + a[(r * 2 + 1) * n + c * 2] + a[(r * 2 + 1) * n + c * 2 + 1]); return o }
+        function conv(a, n) { const o = []; for (let r = 0; r < n; r++)for (let c = 0; c < n; c++) { let s = 0; for (let dr = -1; dr <= 1; dr++)for (let dc = -1; dc <= 1; dc++) { const rr = r + dr, cc = c + dc; if (rr >= 0 && rr < n && cc >= 0 && cc < n) s += (a[rr * n + cc] > 0 ? 1 : 0) } o.push(s >= 2 ? s : 0) } return o }
 
-        // Build DOM
-        function buildTimeline() {
-            const tl = document.getElementById('timeline');
-            tl.innerHTML = '';
-            for (let t = 1; t <= T_MAX; t++) {
-                const c = document.createElement('div');
-                c.className = 't-cell future'; c.id = 'tc' + t; c.textContent = t;
-                c.onclick = () => { if (!playing) jumpTo(t) };
-                tl.appendChild(c);
-            }
-        }
-
-        const STG = [
-            { name: 'Input', icon: '📷', n: 16, cls: 's0', d: '2×28×28' },
-            { name: 'Gatekeeper', icon: '🚧', n: 16, cls: 's1', d: 'filtered' },
-            { name: 'Conv+LIF', icon: '🧬', n: 16, cls: 's2', d: '32×28×28' },
-            { name: 'Pool+Conv2', icon: '💾', n: 8, cls: 's3', d: '64×14×14' },
-            { name: 'Pool2+FC', icon: '✖️', n: 4, cls: 's4', d: '7×7→128' },
-            { name: 'Exit FSM', icon: '🏁', n: 2, cls: 's5', d: '10 classes' },
+        // Stage configs
+        const SG = [
+            { name: 'Input', n: 16, cls: 'si' },
+            { name: 'Gate', n: 16, cls: 'sg2' },
+            { name: 'Conv+LIF', n: 16, cls: 'sf' },
+            { name: 'Pool+C2', n: 8, cls: 'sw' },
+            { name: 'Pool2+FC', n: 4, cls: 'sm' },
+            { name: 'Exit', n: 2, cls: 'se' },
         ];
 
-        function buildPipeline() {
-            const p = document.getElementById('pipeline'); p.innerHTML = '';
-            STG.forEach((s, i) => {
-                if (i > 0) { const a = document.createElement('div'); a.className = 'arrow'; a.id = 'ar' + i; a.textContent = '→'; p.appendChild(a) }
-                const b = document.createElement('div'); b.className = 'stage ' + s.cls; b.id = 'stg' + i;
-                const px = Math.max(4, Math.floor(100 / s.n));
-                b.innerHTML = `<div class="stg-hdr">${s.icon} ${s.name}</div><div class="stg-dims">${s.d}</div>
-      <div class="spike-grid" id="gr${i}" style="grid-template-columns:repeat(${s.n},${px}px);grid-template-rows:repeat(${s.n},${px}px)"></div>
-      <div class="stat-box" id="st${i}">—</div>`;
+        function buildPipe(id, isBaseline) {
+            const p = document.getElementById(id); p.innerHTML = '';
+            const pre = isBaseline ? 'b' : 's';
+            SG.forEach((s, i) => {
+                if (i > 0) { const a = document.createElement('div'); a.className = 'arrow'; a.id = pre + 'a' + i; a.textContent = '→'; p.appendChild(a) }
+                // Skip gatekeeper for baseline
+                if (isBaseline && i === 1) return;
+                const b = document.createElement('div'); b.className = 'stage ' + s.cls; b.id = pre + 's' + i;
+                const px = Math.max(3, Math.floor(80 / s.n));
+                b.innerHTML = `<div class="sh">${s.name}</div>
+      <div class="sg" id="${pre}g${i}" style="grid-template-columns:repeat(${s.n},${px}px);grid-template-rows:repeat(${s.n},${px}px)"></div>
+      <div class="sb" id="${pre}t${i}">—</div>`;
                 p.appendChild(b);
-                const gr = document.getElementById('gr' + i);
-                for (let c = 0; c < s.n * s.n; c++) { const d = document.createElement('div'); d.className = 'sc c-off'; d.id = `g${i}c${c}`; gr.appendChild(d) }
+                const gr = document.getElementById(pre + 'g' + i);
+                for (let c = 0; c < s.n * s.n; c++) { const d = document.createElement('div'); d.className = 'sc c-off'; d.id = `${pre}${i}c${c}`; gr.appendChild(d) }
             });
         }
 
-        function setCell(stage, idx, cls) { document.getElementById(`g${stage}c${idx}`).className = 'sc ' + cls }
-        function setStat(stage, txt) { document.getElementById('st' + stage).textContent = txt }
-        function setAllActive() {
-            STG.forEach((_, i) => { document.getElementById('stg' + i).classList.add('active', 'done') });
-            for (let i = 1; i < STG.length; i++)document.getElementById('ar' + i).classList.add('lit');
+        function buildTL() { const t = document.getElementById('tl'); t.innerHTML = ''; for (let i = 1; i <= T_MAX; i++) { const c = document.createElement('div'); c.className = 'tc future'; c.id = 'tc' + i; c.textContent = i; t.appendChild(c) } }
+
+        function cell(pre, stg, i, cls) { document.getElementById(`${pre}${stg}c${i}`).className = 'sc ' + cls }
+        function stat(pre, stg, t) { document.getElementById(pre + 't' + stg).textContent = t }
+
+        function processT(t) {
+            tNow = t;
+            const f = frame(t);
+
+            // === BASELINE (no gatekeeper, no early exit) ===
+            // Stage 0: input (all spikes pass, noise included)
+            let braw = 0;
+            for (let i = 0; i < 256; i++) {
+                if (f[i] >= 1) { cell('b', 0, i, 'c-bsp'); braw++ }
+                else cell('b', 0, i, 'c-off');
+            }
+            bRaw += braw;
+            stat('b', 0, braw + ' events');
+
+            // Baseline: no stage 1 (no gatekeeper)
+            // Stage 2: Conv+LIF on RAW (unfiltered)
+            const bAll = f.map(v => v >= 1 ? 1 : 0);
+            const bf = conv(bAll, 16); let bact = 0;
+            for (let i = 0; i < 256; i++) {
+                if (bf[i] >= 4) { cell('b', 2, i, 'c-bft'); bact++ }
+                else if (bf[i] >= 2) { cell('b', 2, i, 'c-bfl'); bact++ }
+                else cell('b', 2, i, 'c-off');
+            }
+            bReads += braw; // all raw spikes = reads
+            stat('b', 2, bact + ' act');
+
+            // Stage 3: Pool+Conv2
+            const bp1 = pool(bf.map(v => v >= 2 ? v : 0), 16); const bp2 = conv(bp1, 8); let br2 = 0;
+            for (let i = 0; i < 64; i++) {
+                if (bp2[i] >= 3) { cell('b', 3, i, 'c-bwt'); br2++ }
+                else if (bp2[i] >= 1) { cell('b', 3, i, 'c-off') }
+                else cell('b', 3, i, 'c-off');
+            }
+            bReads += br2; stat('b', 3, br2 + ' reads');
+
+            // Stage 4: Pool2+FC
+            const bp3 = pool(bp2.map(v => v >= 1 ? v : 0), 8); let bfr = 0;
+            for (let i = 0; i < 16; i++) {
+                if (bp3[i] > 2 + Math.random() * 3) { cell('b', 4, i, 'c-bfr'); bfr++ }
+                else if (bp3[i] > 0) { cell('b', 4, i, 'c-bsb') }
+                else cell('b', 4, i, 'c-off');
+            }
+            bReads += bfr; stat('b', 4, bfr + ' fired');
+
+            // Stage 5: Exit (baseline never exits early)
+            bConf = Math.min(0.99, bConf + (0.08 + Math.random() * 0.04) * (1 - bConf));
+            for (let i = 0; i < 4; i++)cell('b', 5, i, i === 0 ? 'c-cl' : 'c-off');
+            stat('b', 5, Math.round(bConf * 100) + '%');
+
+            bReadHist.push(bReads);
+
+            // Light up baseline arrows
+            for (let i = 1; i < 6; i++) { const a = document.getElementById('ba' + i); if (a) a.classList.add('litb') }
+            SG.forEach((_, i) => { const s = document.getElementById('bs' + i); if (s) s.classList.add('on') });
+
+            // === SPARSE (with gatekeeper + early exit) ===
+            if (!sparseHalted) {
+                // Stage 0: input
+                let sraw = 0, snoise = 0;
+                for (let i = 0; i < 256; i++) {
+                    if (f[i] === 2) { cell('s', 0, i, 'c-no'); sraw++; snoise++ }
+                    else if (f[i] === 1) { cell('s', 0, i, 'c-sp'); sraw++ }
+                    else cell('s', 0, i, 'c-off');
+                }
+                sRaw += sraw; stat('s', 0, sraw + ' events');
+
+                // Stage 1: Gatekeeper
+                const filtered = []; let kept = 0, rej = 0;
+                for (let i = 0; i < 256; i++) {
+                    if (f[i] === 2) { cell('s', 1, i, 'c-rj'); filtered.push(0); rej++ }
+                    else if (f[i] === 1) { cell('s', 1, i, 'c-sp'); filtered.push(1); kept++ }
+                    else { cell('s', 1, i, 'c-off'); filtered.push(0) }
+                }
+                sRejected += rej; stat('s', 1, kept + ' kept');
+
+                // Stage 2: Conv+LIF
+                const sf = conv(filtered, 16); let sact = 0;
+                for (let i = 0; i < 256; i++) {
+                    if (sf[i] >= 4) { cell('s', 2, i, 'c-ft'); sact++ }
+                    else if (sf[i] >= 2) { cell('s', 2, i, 'c-fl'); sact++ }
+                    else cell('s', 2, i, 'c-off');
+                }
+                sReads += kept; stat('s', 2, sact + ' act');
+
+                // Stage 3: Pool+Conv2
+                const sp1 = pool(sf.map(v => v >= 2 ? v : 0), 16); const sp2 = conv(sp1, 8); let sr2 = 0;
+                for (let i = 0; i < 64; i++) {
+                    if (sp2[i] >= 3) { cell('s', 3, i, 'c-wt'); sr2++ }
+                    else if (sp2[i] >= 1) { cell('s', 3, i, 'c-wl') }
+                    else cell('s', 3, i, 'c-off');
+                }
+                sReads += sr2; stat('s', 3, sr2 + ' reads');
+
+                // Stage 4: Pool2+FC
+                const sp3 = pool(sp2.map(v => v >= 1 ? v : 0), 8); let sfr = 0;
+                for (let i = 0; i < 16; i++) {
+                    if (sp3[i] > 2 + Math.random() * 3) { cell('s', 4, i, 'c-fr'); sfr++ }
+                    else if (sp3[i] > 0) { cell('s', 4, i, 'c-sb') }
+                    else cell('s', 4, i, 'c-off');
+                }
+                sReads += sfr; stat('s', 4, sfr + ' fired');
+
+                // Stage 5: Early exit
+                sConf = Math.min(0.99, sConf + (0.12 + Math.random() * 0.06) * (1 - sConf) + (t > 3 ? 0.04 : 0) + (t > 5 ? 0.08 : 0));
+                for (let i = 0; i < 4; i++)cell('s', 5, i, i === 0 ? (sConf >= 0.9 ? 'c-cf' : 'c-cl') : 'c-off');
+                stat('s', 5, Math.round(sConf * 100) + '%');
+
+                if (sConf >= 0.9 && !sparseHalted) { sparseHalted = true; sparseExitT = t }
+
+                for (let i = 1; i < 6; i++) { const a = document.getElementById('sa' + i); if (a) a.classList.add('lit') }
+                SG.forEach((_, i) => { const s = document.getElementById('ss' + i); if (s) s.classList.add('on') });
+            }
+
+            sReadHist.push(sReads);
+            updateTL(); updateMetrics();
+
+            // Narration
+            if (sparseHalted && t === sparseExitT) {
+                document.getElementById('narration').innerHTML = `🏁 <b>Sparse SNN halted at T=${sparseExitT}!</b> Confidence reached ${Math.round(sConf * 100)}%. The baseline must continue running all 20 timesteps. Sparse saved <b>${T_MAX - sparseExitT} timesteps</b> of SRAM access.`;
+            } else if (sparseHalted && t > sparseExitT) {
+                const pct = bReads > 0 ? Math.round((1 - sReads / bReads) * 100) : 0;
+                document.getElementById('narration').innerHTML = `<b>T=${t}</b> — Baseline still running, wasting SRAM reads. Sparse has been idle since T=${sparseExitT}. Current savings: <b>${pct}%</b> fewer memory reads.`;
+            } else if (t >= T_MAX) {
+                const pct = bReads > 0 ? Math.round((1 - sReads / bReads) * 100) : 0;
+                document.getElementById('narration').innerHTML = `✅ <b>Simulation complete!</b> The sparse SNN used <b>${pct}% fewer</b> SRAM reads than the baseline. Scroll down for the comparison graph.`;
+                showGraph();
+            } else {
+                document.getElementById('narration').innerHTML = `<b>T=${t}</b> — Both networks process the same frame. Baseline passes all ${braw} events. Sparse gatekeeper filtered out noise, keeping only ${f.filter(v => v === 1).length} clean spikes.`;
+            }
         }
 
-        function updateTimeline() {
+        function updateTL() {
             for (let t = 1; t <= T_MAX; t++) {
                 const c = document.getElementById('tc' + t);
-                if (halted && t > exitT) c.className = 't-cell halted';
-                else if (t === tNow) c.className = 't-cell current';
-                else if (t < tNow) c.className = 't-cell past';
-                else c.className = 't-cell future';
-                if (t === exitT) c.className = 't-cell exit-t';
+                if (sparseHalted && t > sparseExitT && t > tNow) c.className = 'tc halted';
+                else if (t === tNow) c.className = 'tc current';
+                else if (t < tNow) c.className = 'tc past';
+                else c.className = 'tc future';
+                if (t === sparseExitT) c.className = 'tc exit-t';
             }
         }
 
         function updateMetrics() {
-            document.getElementById('mTime').textContent = halted ? `${exitT} (HALT!)` : tNow > 0 ? tNow : '—';
-            document.getElementById('mReads').textContent = cumReads.toLocaleString();
-            const baselineReads = Math.round(cumReads / (tNow || 1) * 20 * 1.4); // estimate baseline
-            document.getElementById('mSaved').textContent = tNow > 0 ? `~${Math.round((1 - cumReads / Math.max(1, baselineReads)) * 100)}% saved vs baseline` : '—';
-            document.getElementById('mSpikes').textContent = cumSpikes.toLocaleString();
-            const neurons = (32 * 28 * 28 + 64 * 14 * 14 + 128 + 10);
-            document.getElementById('mRate').textContent = tNow > 0 ? `firing rate: ${(cumSpikes / (neurons * (tNow)) * 100).toFixed(2)}%` : '—';
-            document.getElementById('mRejected').textContent = cumRejected;
-            document.getElementById('mRejPct').textContent = cumRaw > 0 ? `${Math.round(cumRejected / cumRaw * 100)}% of input events` : '—';
+            document.getElementById('mBR').textContent = bReads.toLocaleString();
+            document.getElementById('mSR').textContent = sReads.toLocaleString();
+            const pct = bReads > 0 ? Math.round((1 - sReads / bReads) * 100) : 0;
+            document.getElementById('mSaved').textContent = pct + '%';
+            document.getElementById('mSavedN').textContent = bReads > 0 ? (bReads - sReads).toLocaleString() + ' fewer reads' : '—';
+            document.getElementById('mT').textContent = sparseHalted ? `${sparseExitT} (HALT!)` : tNow > 0 ? tNow : '—';
+            document.getElementById('mTsub').textContent = sparseHalted ? `baseline still at T=${tNow}` : 'of 20';
 
-            document.getElementById('confPct').textContent = Math.round(confidence * 100) + '%';
-            const fill = document.getElementById('confFill');
-            fill.style.width = Math.min(100, confidence * 100) + '%';
-            fill.style.background = confidence >= 0.9 ? 'linear-gradient(90deg,#00e676,#ffd740)' : 'linear-gradient(90deg,#7b61ff,#00d4ff)';
+            document.getElementById('cfB').style.width = Math.min(100, bConf * 100) + '%';
+            document.getElementById('cpB').textContent = Math.round(bConf * 100) + '%';
+            document.getElementById('cfS').style.width = Math.min(100, sConf * 100) + '%';
+            document.getElementById('cpS').textContent = Math.round(sConf * 100) + '%';
+            if (sConf >= 0.9) { document.getElementById('cfS').style.background = 'linear-gradient(90deg,#00e676,#ffd740)' }
         }
 
-        function processTimestep(t) {
-            tNow = t;
-            const frame = getFrameSpikes(t);
-
-            // Stage 0: Raw input
-            let rawCount = 0, noiseCount = 0;
-            for (let i = 0; i < 256; i++) {
-                if (frame[i] === 2) { setCell(0, i, 'c-noise'); rawCount++; noiseCount++ }
-                else if (frame[i] === 1) { setCell(0, i, 'c-spike'); rawCount++ }
-                else setCell(0, i, 'c-off');
-            }
-            cumRaw += rawCount;
-            setStat(0, `${rawCount} events`);
-
-            // Stage 1: Gatekeeper
-            const filtered = []; let kept = 0, rej = 0;
-            for (let i = 0; i < 256; i++) {
-                if (frame[i] === 2) { setCell(1, i, 'c-rej'); filtered.push(0); rej++ }
-                else if (frame[i] === 1) { setCell(1, i, 'c-spike'); filtered.push(1); kept++ }
-                else { setCell(1, i, 'c-off'); filtered.push(0) }
-            }
-            cumRejected += rej;
-            setStat(1, `${kept} kept, ${rej} rej`);
-
-            // Stage 2: Conv1+LIF
-            const feat = conv3x3(filtered, 16); let act = 0;
-            for (let i = 0; i < 256; i++) {
-                if (feat[i] >= 4) { setCell(2, i, 'c-feat'); act++ }
-                else if (feat[i] >= 2) { setCell(2, i, 'c-featlo'); act++ }
-                else setCell(2, i, 'c-off');
-            }
-            cumReads += kept;
-            cumSpikes += act;
-            setStat(2, `${act} activations`);
-
-            // Stage 3: Pool→Conv2 (16→8)
-            const p1 = pool(feat.map(v => v >= 2 ? v : 0), 16);
-            const f2 = conv3x3(p1, 8); let reads2 = 0;
-            for (let i = 0; i < 64; i++) {
-                if (f2[i] >= 3) { setCell(3, i, 'c-wt'); reads2++ }
-                else if (f2[i] >= 1) { setCell(3, i, 'c-wlo') }
-                else setCell(3, i, 'c-off');
-            }
-            cumReads += reads2; cumSpikes += reads2;
-            setStat(3, `${reads2} reads`);
-
-            // Stage 4: Pool2+FC (8→4)
-            const p2 = pool(f2.map(v => v >= 1 ? v : 0), 8); let fired = 0;
-            for (let i = 0; i < 16; i++) {
-                const th = 2 + Math.random() * 3;
-                if (p2[i] > th) { setCell(4, i, 'c-fire'); fired++ }
-                else if (p2[i] > 0) { setCell(4, i, 'c-mac') }
-                else setCell(4, i, 'c-off');
-            }
-            cumSpikes += fired;
-            setStat(4, `${fired} fired`);
-
-            // Stage 5: Early exit
-            // Confidence grows with timesteps, faster for "easy" digits
-            const confGain = 0.12 + Math.random() * 0.08 + (t > 3 ? 0.05 : 0) + (t > 6 ? 0.1 : 0);
-            confidence = Math.min(0.99, confidence + confGain * (1 - confidence));
-            for (let i = 0; i < 4; i++) {
-                if (i === 0) setCell(5, i, confidence >= 0.9 ? 'c-conf' : 'c-conflo');
-                else setCell(5, i, 'c-off');
-            }
-            const confStr = Math.round(confidence * 100);
-            setStat(5, `${confStr}% → "${digit}"`);
-
-            // Check early exit
-            if (confidence >= 0.9 && !halted) {
-                halted = true; exitT = t;
-            }
-
-            setAllActive();
-            updateTimeline();
-            updateMetrics();
-
-            if (halted && t === exitT) {
-                document.getElementById('narration').innerHTML = `🏁 <b>EARLY EXIT at T=${exitT}!</b> Confidence reached ${confStr}% — the FSM halted the pipeline. Saved <b>${T_MAX - exitT} timesteps</b> of compute and memory access. The digit "<b>${digit}</b>" was classified using only ${Math.round(exitT / T_MAX * 100)}% of the maximum time budget.`;
-            } else if (t >= T_MAX) {
-                document.getElementById('narration').innerHTML = `Completed all T=${T_MAX} timesteps. Final confidence: ${confStr}%. Digit "<b>${digit}</b>" classified.`;
-            } else {
-                document.getElementById('narration').innerHTML = `<b>T=${t}</b> — Spikes flow through all 6 blocks. Membrane potentials accumulate. Confidence: <b>${confStr}%</b>${confidence > 0.7 ? ' (approaching exit threshold!)' : ''}. ${T_MAX - t} timesteps remaining.`;
-            }
-        }
-
-        function stepOne() {
-            if (halted) return;
-            if (tNow >= T_MAX) return;
-            processTimestep(tNow + 1);
-        }
-
-        function jumpTo(target) {
-            resetAll();
-            for (let t = 1; t <= target; t++) {
-                if (halted) break;
-                processTimestep(t);
-            }
-        }
-
+        function stepOne() { if (tNow >= T_MAX) return; processT(tNow + 1); if (tNow >= T_MAX) showGraph() }
         function togglePlay() {
             if (playing) { playing = false; clearInterval(timer); document.getElementById('btnPlay').textContent = '▶ Play'; return }
-            if (halted || tNow >= T_MAX) resetAll();
-            playing = true;
-            document.getElementById('btnPlay').textContent = '⏸ Pause';
+            if (tNow >= T_MAX) resetAll();
+            playing = true; document.getElementById('btnPlay').textContent = '⏸ Pause';
             timer = setInterval(() => {
-                if (halted || tNow >= T_MAX) { playing = false; clearInterval(timer); document.getElementById('btnPlay').textContent = '▶ Play'; return }
-                processTimestep(tNow + 1);
-            }, 800);
+                if (tNow >= T_MAX) { playing = false; clearInterval(timer); document.getElementById('btnPlay').textContent = '▶ Play'; showGraph(); return }
+                processT(tNow + 1);
+            }, 700);
         }
-
-        function cycleDigit() {
-            dIdx = (dIdx + 1) % DKEYS.length; digit = DKEYS[dIdx]; resetAll();
-            document.getElementById('narration').innerHTML = `Digit changed to "<b>${digit}</b>". Press <b>Play</b> to watch it flow through the pipeline across time.`;
-        }
+        function cycleDigit() { dI = (dI + 1) % DK.length; digit = DK[dI]; resetAll(); document.getElementById('narration').innerHTML = `Now showing digit "<b>${digit}</b>". Press <b>Play</b>.` }
 
         function resetAll() {
-            playing = false; if (timer) clearInterval(timer);
-            document.getElementById('btnPlay').textContent = '▶ Play';
-            tNow = 0; halted = false; exitT = -1;
-            cumReads = 0; cumSpikes = 0; cumRejected = 0; cumRaw = 0; confidence = 0;
-            STG.forEach((s, i) => {
-                for (let c = 0; c < s.n * s.n; c++)setCell(i, c, 'c-off');
-                document.getElementById('stg' + i).classList.remove('active', 'done');
-                setStat(i, '—');
+            playing = false; if (timer) clearInterval(timer); document.getElementById('btnPlay').textContent = '▶ Play';
+            tNow = 0; sparseHalted = false; sparseExitT = -1;
+            bReads = 0; sReads = 0; bConf = 0; sConf = 0; bReadHist = []; sReadHist = [];
+            bRejected = 0; sRejected = 0; bRaw = 0; sRaw = 0;
+
+            SG.forEach((s, i) => {
+                ['b', 's'].forEach(pre => {
+                    const el = document.getElementById(pre + 's' + i); if (!el) return;
+                    el.classList.remove('on');
+                    for (let c = 0; c < s.n * s.n; c++) { const cc = document.getElementById(`${pre}${i}c${c}`); if (cc) cc.className = 'sc c-off' }
+                    const st = document.getElementById(pre + 't' + i); if (st) st.textContent = '—';
+                });
+                for (let a = 1; a < 6; a++) {
+                    const ab = document.getElementById('ba' + a); if (ab) ab.classList.remove('litb');
+                    const as2 = document.getElementById('sa' + a); if (as2) as2.classList.remove('lit');
+                }
             });
-            for (let i = 1; i < STG.length; i++)document.getElementById('ar' + i).classList.remove('lit');
-            updateTimeline(); updateMetrics();
-            document.getElementById('narration').innerHTML = 'Press <b>Play</b> to watch the SNN process digit "<b>' + digit + '</b>" across 20 timesteps. Spikes accumulate, membrane potential builds, and when confidence crosses 90%, the system halts early.';
+            updateTL(); updateMetrics();
+            document.getElementById('graphArea').style.display = 'none';
+            document.getElementById('narration').innerHTML = 'Press <b>Play</b> to watch both networks process digit "<b>' + digit + '</b>" simultaneously.';
         }
 
-        buildTimeline(); buildPipeline(); resetAll();
+        function showGraph() {
+            const area = document.getElementById('graphArea'); area.style.display = 'block';
+            const canvas = document.getElementById('chart');
+            const ctx = canvas.getContext('2d');
+            canvas.width = canvas.offsetWidth * 2; canvas.height = 440;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const pL = 80, pR = 30, pT = 30, pB = 50;
+            const w = canvas.width - pL - pR, h = canvas.height - pT - pB;
+            const maxR = Math.max(...bReadHist, ...sReadHist) * 1.1;
+            const n = bReadHist.length;
+
+            // Grid
+            ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+            for (let i = 0; i <= 5; i++) {
+                const y = pT + h - h * (i / 5);
+                ctx.beginPath(); ctx.moveTo(pL, y); ctx.lineTo(pL + w, y); ctx.stroke();
+                ctx.fillStyle = '#5a6380'; ctx.font = '20px JetBrains Mono'; ctx.textAlign = 'right';
+                ctx.fillText(Math.round(maxR * i / 5).toLocaleString(), pL - 8, y + 6);
+            }
+            for (let t = 0; t < n; t++) {
+                const x = pL + w * (t / (n - 1));
+                ctx.fillStyle = '#5a6380'; ctx.font = '18px JetBrains Mono'; ctx.textAlign = 'center';
+                ctx.fillText('T' + (t + 1), x, canvas.height - 12);
+            }
+            ctx.fillStyle = '#8892a8'; ctx.font = '20px Inter'; ctx.textAlign = 'center';
+            ctx.fillText('Timestep', pL + w / 2, canvas.height - 2);
+            ctx.save(); ctx.translate(16, pT + h / 2); ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Cumulative SRAM Reads', 0, 0); ctx.restore();
+
+            // Savings fill
+            ctx.beginPath();
+            for (let t = 0; t < n; t++) { const x = pL + w * (t / (n - 1)), y = pT + h - h * (bReadHist[t] / maxR); t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y) }
+            for (let t = n - 1; t >= 0; t--) { const x = pL + w * (t / (n - 1)), y = pT + h - h * (sReadHist[t] / maxR); ctx.lineTo(x, y) }
+            ctx.closePath(); ctx.fillStyle = 'rgba(255,107,157,0.08)'; ctx.fill();
+
+            // Smooth curve helper
+            function drawSmooth(data, color, lw) {
+                ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = lw;
+                for (let t = 0; t < n; t++) {
+                    const x = pL + w * (t / (n - 1)), y = pT + h - h * (data[t] / maxR);
+                    if (t === 0) { ctx.moveTo(x, y); continue }
+                    const px = pL + w * ((t - 1) / (n - 1)), py = pT + h - h * (data[t - 1] / maxR);
+                    const cpx = (px + x) / 2;
+                    ctx.bezierCurveTo(cpx, py, cpx, y, x, y);
+                }
+                ctx.stroke();
+
+                // Dots
+                for (let t = 0; t < n; t++) {
+                    const x = pL + w * (t / (n - 1)), y = pT + h - h * (data[t] / maxR);
+                    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+                }
+            }
+
+            drawSmooth(bReadHist, '#ff6b9d', 3);
+            drawSmooth(sReadHist, '#00d4ff', 3);
+
+            // Early exit marker
+            if (sparseExitT > 0) {
+                const x = pL + w * ((sparseExitT - 1) / (n - 1));
+                ctx.strokeStyle = '#00e676'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+                ctx.beginPath(); ctx.moveTo(x, pT); ctx.lineTo(x, pT + h); ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#00e676'; ctx.font = 'bold 18px Inter'; ctx.textAlign = 'center';
+                ctx.fillText('← Sparse HALT (T=' + sparseExitT + ')', x + 70, pT + 16);
+            }
+
+            // Final values
+            const pct = bReads > 0 ? Math.round((1 - sReads / bReads) * 100) : 0;
+            ctx.fillStyle = '#ff6b9d'; ctx.font = 'bold 22px JetBrains Mono'; ctx.textAlign = 'right';
+            ctx.fillText('Baseline: ' + bReads.toLocaleString(), pL + w, pT + h - h * (bReadHist[n - 1] / maxR) - 12);
+            ctx.fillStyle = '#00d4ff';
+            ctx.fillText('Sparse: ' + sReads.toLocaleString() + ' (' + pct + '% saved)', pL + w, pT + h - h * (sReadHist[n - 1] / maxR) + 22);
+        }
+
+        buildTL(); buildPipe('pipeB', true); buildPipe('pipeS', false); resetAll();
+        window.addEventListener('resize', () => { if (tNow >= T_MAX) showGraph() });
     </script>
 </body>
 
