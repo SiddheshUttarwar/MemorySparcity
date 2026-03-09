@@ -1,170 +1,198 @@
-# Neuromorphic Spiking Neural Network (CSNN) on N-MNIST
+# Sparse Neuromorphic SNN: Software-Hardware Co-Design on N-MNIST
 
-This repository contains a full pipeline to process the natively event-based N-MNIST dataset and train a deep **Convolutional Spiking Neural Network (CSNN)** using Surrogate Gradient Backpropagation (STBP).
+This repository implements a full **software-hardware co-design** pipeline: a sparsity-optimized **Convolutional Spiking Neural Network (CSNN)** trained in PyTorch with Surrogate Gradient Backpropagation (STBP), mapped to a custom **Verilog RTL** inference accelerator with spike-driven memory access.
 
-📐 **Hardware Architecture:** For a detailed breakdown of every RTL block (Dynamic Gatekeeper, Quantized SRAM, Sparse MAC, Adaptive LIF, Early Exit FSM, and Top-Level Integration), see **[hardware_architecture.md](hardware_architecture.md)**.
+📐 **Hardware Architecture:** For detailed RTL block descriptions, signal tables, and parameters, see **[hardware_architecture.md](hardware_architecture.md)**.
 
-## 🚀 Instant Google Colab GPU Training (Recommended)
+---
 
-Since training Spiking Neural Networks on CPU can take days, you can run this entire repository natively in the cloud for free using a Google Colab GPU (T4 / A100).
+## 🧠 Model Architecture
 
-1. Open a new [Google Colab Notebook](https://colab.research.google.com/).
-2. Change the Runtime to GPU: `Runtime -> Change runtime type -> T4 GPU`.
-3. Paste and run this exact cell block to instantly fetch, process, and train:
+The network follows a **LeNet-5** topology adapted for temporal spike processing. Each input sample is a sequence of **T=20 time bins** from the N-MNIST event camera (2 polarity channels, 28×28 spatial).
+
+### Network Layers (Per Timestep)
+
+| Layer | Type | Input | Output | Kernel | Parameters | Purpose |
+|-------|------|-------|--------|--------|------------|---------|
+| `conv1` | Conv2d | 2×28×28 | 32×28×28 | 5×5 | 1,600 | Spatial feature extraction |
+| `bn1` | BatchNorm2d | 32×28×28 | 32×28×28 | — | 64 | Normalize activations before LIF threshold |
+| `lif1` | Adaptive LIF | 32×28×28 | 32×28×28 (spikes) | — | 0 | Leaky integrate-and-fire with adaptive threshold |
+| `pool1` | AvgPool2d | 32×28×28 | 32×14×14 | 2×2 | 0 | Downsample; AvgPool preserves firing rate density |
+| `conv2` | Conv2d | 32×14×14 | 64×14×14 | 5×5 | 51,200 | Higher-level feature extraction |
+| `bn2` | BatchNorm2d | 64×14×14 | 64×14×14 | — | 128 | Normalize before second LIF layer |
+| `lif2` | Adaptive LIF | 64×14×14 | 64×14×14 (spikes) | — | 0 | Second spiking layer |
+| `pool2` | AvgPool2d | 64×14×14 | 64×7×7 | 2×2 | 0 | Second spatial downsample |
+| `flatten` | Flatten | 64×7×7 | 3136 | — | 0 | Reshape for fully-connected layers |
+| `dropout` | Dropout(0.5) | 3136 | 3136 | — | 0 | Regularization (training only) |
+| `fc1` | Linear | 3136 | 128 | — | 401,408 | Dense classification layer |
+| `lif3` | Adaptive LIF | 128 | 128 (spikes) | — | 0 | Third spiking layer |
+| `fc2` | Linear | 128 | 10 | — | 1,280 | Output layer (10 digit classes) |
+| `lif4` | Adaptive LIF | 10 | 10 (spikes) | — | 0 | Output spike generation |
+
+**Total Trainable Parameters: 455,680** (all weights are bias-free and INT8 quantized for SRAM)
+
+### Key Layer Explanations
+
+**Batch Normalization (BN):** Normalizes conv outputs to mean≈0, std≈1 before the LIF neuron. Without BN, the fixed threshold (`v_th=1.0`) would cause neurons to either never fire (values too small) or always fire (values too large). During inference, BN can be folded into conv weights for zero hardware overhead.
+
+**Average Pooling (AvgPool):** Chosen over MaxPool because LIF outputs are binary spikes (0 or 1). MaxPool on binary data only tells "did any neuron fire?" — AvgPool preserves the **firing density** (e.g., 0.25 = 25% of neurons fired in that region), which carries much more information.
+
+**Adaptive LIF Neuron:** Implements leaky integrate-and-fire dynamics with adaptive thresholding:
+- Membrane potential: `v(t) = β·v(t-1) + x(t)` (leak factor β=0.9)
+- Spike generation: fires when `v(t) > v_th(t)`
+- Adaptive threshold: `v_th(t+1) = v_th(t) + ρ` after each spike (ρ=0.05), suppressing spike storms
+- Uses **Fast Sigmoid surrogate gradient** for backpropagation through the non-differentiable spike function
+
+---
+
+## ⚡ Sparsity Optimizations
+
+The Sparse CSNN (`sparse_snn_model.py`) implements four hardware-aware optimizations:
+
+### 1. Dynamic Gatekeeper (Input Filter)
+Filters incoming spike events before they trigger SRAM reads. Combines two sub-filters:
+- **Importance Monitor:** Tracks per-pixel activity with saturating counters and a decay window. Low-activity events (background noise) are rejected.
+- **Burst Redundancy Filter:** Suppresses consecutive identical spikes from the same source that add no new temporal information.
+- **Result:** ~30% of input spikes are rejected → 30% fewer SRAM reads at the input layer.
+
+### 2. Temporal Early Exit
+Instead of always running T=20 timesteps, the forward pass monitors output-layer confidence via softmax probabilities. When confidence exceeds 90% for all samples in the batch, inference halts early (often at T=4–8 for easy digits), saving proportional compute and memory access.
+
+### 3. Adaptive Thresholding
+LIF neurons dynamically raise their firing threshold after spiking (by ρ=0.05 per spike). This creates **temporal sparsity** — neurons that fire frequently become harder to trigger, naturally reducing total spike count and downstream SRAM reads.
+
+### 4. INT8 Weight Quantization
+All weights are quantized to signed 8-bit integers (`-127` to `+127`) using symmetric quantization (`scale = max(|w|)/127`). This matches the 8-bit data width of the Verilog `quantized_sram.v` module and reduces SRAM storage by 4× compared to FP32.
+
+---
+
+## 🔧 Software-Hardware Bridge
+
+The `export_weights_mem.py` script bridges training (software) and inference (hardware):
+
+```
+PyTorch Model (.pth) → INT8 Quantization → Hex .mem Files → Verilog $readmemh → quantized_sram.v
+```
+
+### Verilog Weight Loading
+```verilog
+quantized_sram #(
+    .ADDR_WIDTH(11),
+    .DATA_WIDTH(8),
+    .MEM_FILE("mem_weights/conv1_weights.mem")  // Trained weights loaded here
+) conv1_sram ( .clk(clk), .addr(addr), .re(spike_in), .data_out(weight) );
+```
+
+### Exported Weight Files
+
+| File | Layer | Entries | SRAM Size |
+|------|-------|---------|-----------|
+| `conv1_weights.mem` | Conv1 (2×5×5 → 32) | 1,600 | 1.6 KB |
+| `conv2_weights.mem` | Conv2 (32×5×5 → 64) | 51,200 | 50 KB |
+| `fc1_weights.mem` | FC1 (3136 → 128) | 401,408 | 392 KB |
+| `fc2_weights.mem` | FC2 (128 → 10) | 1,280 | 1.3 KB |
+
+---
+
+## 🚀 Quick Start (Google Colab — Recommended)
+
+Since training SNNs on CPU can take days, use a free Colab GPU:
+
+1. Open [Google Colab](https://colab.research.google.com/) → `Runtime → Change runtime type → T4 GPU`
+2. Paste and run:
 
 ```bash
-# 1. Clone the repository into the Colab environment
+# Clone and setup
 !git clone https://github.com/SiddheshUttarwar/MemorySparcity.git
 %cd MemorySparcity
+!unzip -q Train.zip && unzip -q Test.zip
 
-# 2. Extract the N-MNIST Datasets silently (Required for Colab)
-!unzip -q Train.zip
-!unzip -q Test.zip
+# Preprocess 70,000 N-MNIST events
+!python preprocess_dataset.py
 
-# 3. Preprocess the 70,000 spikes (using Colab's Linux processors)
-!python preprocess_nmnist.py
-
-# 4. Install Visualization Hooks
+# Install visualization tools
 !pip install -q torchinfo torchviz graphviz
 
-# 5. Train the standard Dense CSNN Baseline (Saves: best_baseline_model.pth)
+# Train baseline CSNN (saves best_baseline_model.pth)
 !python train.py
 
-# 6. Train the fully-fledged Sparsity-Optimized SNN on the NVIDIA GPU (Saves: best_sparse_model.pth)
+# Train sparse CSNN (saves best_sparse_model.pth)
 !python train_sparse.py
 
-# 7. Render the Architecture Diagrams
+# Render architecture diagrams
 !python visualize_model.py
 
-# 8. Run single Inferences and calculate exact Hardware Memory Fetches for Sparse gating
+# Run inference with hardware metrics
 !python predict_sparse.py
 
-# 9. Advanced Benchmarking: Statistically compare the Baseline SNN vs Sparse SNN Memory Overhead! 
-# (Generates hardware_comparative_analysis.png with Firing Rates, Gatekeeper Rejection, and SRAM savings measures)
+# Compare baseline vs sparse (generates hardware_comparative_analysis.png)
 !python predict_compare.py
+
+# Export weights to Verilog .mem format
+!python export_weights_mem.py --model best_sparse_model.pth
 ```
-*(If you do not see `Train.zip` and `Test.zip` in your repo yet, simply drag and drop them from your computer into the left-hand folder menu inside Colab before running the `!unzip` commands.)*
 
-## Local Guide: Windows PyTorch Environment Setup
+*(If `Train.zip`/`Test.zip` are not in the repo, drag-drop them from your computer into the Colab file browser before running `unzip`.)*
 
-Follow these exact steps to set up the environment, process the raw N-MNIST spike events, and train the network on your GPU.
+---
 
-### Step 1: Ensure you have the N-MNIST Dataset
-Make sure you have downloaded the N-MNIST dataset. You must have the two zip files sitting perfectly in the root directory of this project:
-- `Train.zip`
-- `Test.zip`
+## 💻 Local Setup (Windows)
 
-*(Do not extract them yourself. The Python scripts will read directly from the `.zip` archives to save disk space and file indexing overhead.)*
+### Step 1: Dataset
+Place `Train.zip` and `Test.zip` in the project root. Do not extract manually.
 
-### Step 2: Set up the PyTorch GPU Environment (Windows PowerShell)
-You need an isolated Python environment with NVIDIA CUDA capabilities to execute the Surrogate Gradient training efficiently. Run these exact rules in your PowerShell terminal inside the project directory:
-
+### Step 2: Python Environment
 ```powershell
-# 1. Create a native isolated virtual environment
 python -m venv .venv
-
-# 2. Bypass Windows App Execution limits so you can activate the environment
 Set-ExecutionPolicy -ExecutionPolicy UNRESTRICTED -Scope CurrentUser
-
-# 3. Activate the virtual environment! (You must do this every time you open a new terminal)
 .\.venv\Scripts\Activate.ps1
-
-# 4. Give pip an upgrade
 python -m pip install --upgrade pip
-
-# 5. Install PyTorch with NVIDIA CUDA 12.1 support (Change cu121 if your GPU uses a different version)
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-
-# 6. Install the supporting computation libraries
 pip install numpy scipy matplotlib
 ```
 
-### Step 3: Preprocess the 70,000 N-MNIST Events
-The N-MNIST dataset format (`x, y, polarity, timestamp`) must be translated into spatial-temporal tensors `[Time, Channels, Height, Width]` for the deep network.
-
-Launch the preprocessing pipeline. It uses multiprocessing across all your CPU cores to crunch 70,000 files in under 2 minutes.
-
+### Step 3: Preprocess → Train → Evaluate
 ```powershell
-# Make sure your environment is active: .\venv\Scripts\Activate.ps1
-python preprocess_dataset.py
-```
-*Wait for this to finish printing "All completely done!". It will create a `preprocessed_data_native` directory.*
-
-### Step 4: Verify the Data Pipeline (Optional Baseline)
-Before launching the heavy Spiking Neural Network, you can verify your dataset extracted perfectly by training a standard, non-spiking CNN (which crushes the time dimension perfectly into 2D imagery).
-
-```powershell
-python train_fast_cnn.py
-```
-*(You should see >98% accuracy hit within ~2 minutes. This proves everything works!)*
-
-### Step 5: Train the Convolutional Spiking Neural Network (CSNN)
-Now, train the true deep SNN. This script natively locates your NVIDIA GPU, builds the LeNet-5 architecture with `snntorch` style surrogate gradients, and unrolls the physical time dynamics ($T=20$ time steps).
-
-**SRAM Integration Note:** This architecture physically integrates with `SRAM.py`! Before every training iteration, the PyTorch tensors fetch their parameter weights directly from simulated `SRAMWeightMemory` blocks. During backpropagation, the PyTorch gradients are forcefully copied back into the SRAM matrices, ensuring all memory modeling behaves identically to Neuromorphic hardware.
-
-```powershell
-python train.py
+python preprocess_dataset.py    # Preprocess 70,000 events (~2 min)
+python train.py                 # Train baseline CSNN
+python train_sparse.py          # Train sparse CSNN with HW metrics
+python predict_sparse.py        # Single-sample inference
+python predict_compare.py       # 100-sample baseline vs sparse comparison
+python export_weights_mem.py    # Export weights for Verilog
 ```
 
-Watch the training epochs and Cross-Entropy Loss print out. Your GPU is now mapping temporal spike behavior linked directly to the SRAM blocks!
-
-### Step 6: Train the Sparsity-Optimized SNN (Sparse-SNN)
-To optimize for hardware constraints and maximize the **Accuracy-per-Spike** ratio (SRAM Efficiency), we've implemented a specialized Sparse architecture (`sparse_snn_model.py` and `train_sparse.py`).
-
-This custom network includes:
-- **L1 Activity Regularization:** Mathematically penalizes the network for firing too many spikes, forcing it to learn MNIST in the most minimalist way possible.
-- **Adaptive Thresholding:** Neurons dynamically raise their voltage thresholds after firing to suppress "Spike Storms."
-- **Temporal Early-Exit:** Instead of running the full $T=20$ simulation loop blindly, the forward pass will short-circuit and break early if the classification layer reaches a high confidence state (e.g. distinguishing a digit unambiguously in 4 steps).
-- **INT8 Weight Quantization:** Before floating-point weights are synced to the `SRAMWeightMemory` module, they are clamped into an 8-bit scale (`-127` to `127`).
-
-To test this high-efficiency hardware model natively, simply run:
-```powershell
-python train_sparse.py
-```
-*Note: The terminal will now actively output `T-Avg` (average steps taken due to Early Exit) and `SRAM Eff` (Accuracy / Total Spikes).*
-
-### Step 7: Export Trained Weights to Verilog `.mem` Files
-After training, bridge the software-hardware gap by exporting the INT8-quantized weights into Verilog-compatible `.mem` hex files for loading into `quantized_sram.v` via `$readmemh`:
-
-```bash
-python export_weights_mem.py --model best_sparse_model.pth
-```
-
-This generates files in `mem_weights/`:
-| File | Layer | Entries |
-|------|-------|---------|
-| `conv1_weights.mem` | Conv1 (2×5×5 → 32) | 1,600 |
-| `conv2_weights.mem` | Conv2 (32×5×5 → 64) | 51,200 |
-| `fc1_weights.mem` | FC1 (3136 → 128) | 401,408 |
-| `fc2_weights.mem` | FC2 (128 → 10) | 1,280 |
-| `quantization_scales.txt` | Dequantization scales | — |
-| `load_weights.vh` | Verilog `$readmemh` snippet | — |
+---
 
 ## 📂 Project Structure
 
 ```
-├── snn_model.py              # Baseline LeNet-5 CSNN (dense)
-├── sparse_snn_model.py       # Sparse CSNN with gatekeeper + early exit + adaptive LIF
+├── snn_model.py              # Baseline LeNet-5 CSNN (dense, no sparsity)
+├── sparse_snn_model.py       # Sparse CSNN (gatekeeper + early exit + adaptive LIF)
 ├── SRAM.py                   # Simulated SRAM weight memory model
-├── train.py                  # Baseline CSNN training
-├── train_sparse.py           # Sparse CSNN training with HW metrics
+├── train.py                  # Baseline CSNN training script
+├── train_sparse.py           # Sparse CSNN training with live HW metrics
 ├── predict_sparse.py         # Single-sample inference with SRAM read tracking
-├── predict_compare.py        # 100-sample baseline vs sparse comparison
-├── export_weights_mem.py     # PyTorch → Verilog .mem weight export
-├── preprocess_dataset.py     # N-MNIST event → tensor preprocessing
+├── predict_compare.py        # 100-sample baseline vs sparse statistical comparison
+├── export_weights_mem.py     # PyTorch → Verilog .mem INT8 weight export
+├── preprocess_dataset.py     # N-MNIST raw events → spatial-temporal tensor pipeline
 ├── visualize_model.py        # Architecture diagram generation
-├── Hardware_Architecture/    # Verilog RTL modules
-│   ├── sparse_snn_top.v      # Top-level integration
-│   ├── quantized_sram.v      # SRAM with MEM_FILE parameter
-│   ├── sparse_mac.v          # Spike-driven MAC unit
-│   ├── adaptive_lif.v        # LIF neuron with adaptive threshold
-│   ├── dynamic_gatekeeper.v  # Input event filter
-│   ├── early_exit_fsm.v      # Confidence-based early exit FSM
-│   ├── importance_monitor.v  # Density-based activity filter
-│   ├── burst_redundancy.v    # Consecutive spike suppressor
-│   └── tb_sram_weights.v     # Testbench for weight loading
-├── mem_weights/              # Exported INT8 .mem files for $readmemh
-└── hardware_architecture.md  # Detailed RTL block documentation
+├── Hardware_Architecture/    # Verilog RTL modules for inference accelerator
+│   ├── sparse_snn_top.v      #   Top-level integration (connects all blocks)
+│   ├── quantized_sram.v      #   INT8 SRAM with $readmemh MEM_FILE parameter
+│   ├── sparse_mac.v          #   Spike-driven multiply-accumulate unit
+│   ├── adaptive_lif.v        #   LIF neuron with adaptive threshold
+│   ├── dynamic_gatekeeper.v  #   Input event filter (importance + burst)
+│   ├── early_exit_fsm.v      #   Confidence-based early exit FSM
+│   ├── importance_monitor.v  #   Density-based activity filter
+│   ├── burst_redundancy.v    #   Consecutive spike suppressor
+│   └── tb_sram_weights.v     #   Testbench for weight loading verification
+├── mem_weights/              # Exported INT8 .mem files for Verilog $readmemh
+├── hardware_architecture.md  # Detailed RTL block documentation
+└── Neuromorphic_Report_ECE274.tex  # IEEE conference paper (LaTeX)
 ```
 
+---
+
+## 📄 Authors
+
+- **Siddhesh Uttarwar** — University of California, Santa Barbara (suttarwar@ucsb.edu)
