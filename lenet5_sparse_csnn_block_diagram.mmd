@@ -1,0 +1,45 @@
+flowchart TD
+    %% LeNet5_Sparse_CSNN (time-unrolled SNN with shared weights)
+
+    Start(["Start Inference"])
+    In["Input spike frame X_t<br/>shape: 1x28x28"]
+    Start --> In
+
+    subgraph TS["One Time Step t - shared parameters"]
+        C1["Conv2d 1->32, k=5<br/>params: 1600<br/>out: 32x28x28"]
+        B1["BatchNorm2d 32<br/>params: 64"]
+        L1["LIFNodeSTBP_Sparse<br/>out: 32x28x28"]
+        P1["AvgPool2d 2x2<br/>out: 32x14x14"]
+
+        C2["Conv2d 32->64, k=5<br/>params: 51200<br/>out: 64x14x14"]
+        B2["BatchNorm2d 64<br/>params: 128"]
+        L2["LIFNodeSTBP_Sparse<br/>out: 64x14x14"]
+        P2["AvgPool2d 2x2<br/>out: 64x7x7"]
+
+        F["Flatten<br/>3136"]
+        D["Dropout"]
+        FC1["Linear 3136->128<br/>params: 401408"]
+        L3["LIFNodeSTBP_Sparse<br/>out: 128"]
+        FC2["Linear 128->10<br/>params: 1280"]
+        L4["LIFNodeSTBP_Sparse<br/>class spikes s_t (10)"]
+
+        In --> C1 --> B1 --> L1 --> P1
+        P1 --> C2 --> B2 --> L2 --> P2
+        P2 --> F --> D --> FC1 --> L3 --> FC2 --> L4
+    end
+
+    Acc["Temporal accumulation<br/>score_c = score_c + s_t"]
+    Exit{"Early-exit condition<br/>max(score_c) >= Psi_conf ?"}
+    Next["Next time bin t = t + 1"]
+    Out["Prediction = argmax(score)"]
+
+    L4 --> Acc --> Exit
+    Exit -- "No (t < T_max)" --> Next
+    Next --> In
+    Exit -- "Yes or t = T_max" --> Out
+
+    Note1["Recursive entries in torchinfo mean the same block is reused across time steps (shared weights)."]
+    Note2["Unique trainable params: 455680<br/>Total mult-adds are for the unrolled forward pass."]
+
+    Start -.-> Note1
+    Out -.-> Note2
