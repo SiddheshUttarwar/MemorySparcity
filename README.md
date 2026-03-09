@@ -2,7 +2,15 @@
 
 This repository implements a full **software-hardware co-design** pipeline: a sparsity-optimized **Convolutional Spiking Neural Network (CSNN)** trained in PyTorch with Surrogate Gradient Backpropagation (STBP), mapped to a custom **Verilog RTL** inference accelerator with spike-driven memory access.
 
-📐 **Hardware Architecture:** For detailed RTL block descriptions, signal tables, and parameters, see **[hardware_architecture.md](hardware_architecture.md)**.
+### 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| **[mathematical_model.md](mathematical_model.md)** | All equations: LIF dynamics, surrogate gradient, gatekeeper, early exit, quantization, energy model |
+| **[hardware_architecture.md](hardware_architecture.md)** | RTL block descriptions, signal tables, and parameters for all Verilog modules |
+| **[lenet5.md](lenet5.md)** | Layer-by-layer shape transformations and parameter counts |
+| **[lenet5_sparse_csnn_structure_table.md](lenet5_sparse_csnn_structure_table.md)** | Compact structural table (per timestep, shared weights) |
+| **[hardware_pipeline_animation.html](hardware_pipeline_animation.html)** | Interactive animation: baseline vs sparse side-by-side with SRAM graph |
 
 ---
 
