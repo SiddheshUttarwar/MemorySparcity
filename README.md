@@ -6,6 +6,19 @@ This repository implements a full **software-hardware co-design** pipeline: a sp
 
 ---
 
+## 🌟 What Makes This Project Unique? (Our Novelty)
+
+Unlike traditional AI tutorials, this project solves a real-world physical problem: **Memory Bottlenecks** (the "Memory Wall"). When AI runs on a physical chip, fetching data from memory (SRAM) consumes far more power than doing the actual math. 
+
+We built a unique **Hardware-Software Pipeline** that attacks this problem from four different angles simultaneously:
+
+1. **The "Bouncer" (Dynamic Gatekeeper):** Instead of processing every signal the camera sees, we built a hardware filter at the very front door. It ignores completely random noise and duplicate signals, stopping useless data before it ever touches the memory.
+2. **"Lazy" Neurons (Adaptive Thresholds):** If a neuron fires too often (like a "spike storm"), it dynamically raises its own threshold, forcing itself to calm down and only fire when something truly important happens.
+3. **The "Stop Early" Button (Temporal Early-Exit):** Instead of always examining the video for a fixed 20 frames, the network constantly checks its own confidence. If it recognizes a "7" clearly by frame 5, it shuts down the rest of the computation instantly, saving 75% of the energy.
+4. **Hardware-Taught Software (Co-Design):** Usually, software AI is trained first and just "forced" to fit on hardware later. In our Python code, we explicitly track exactly how many times the simulated hardware fetches from memory. The AI actively learns to penalize itself for wasting memory during training.
+
+The result is a highly accurate AI that uses a fraction of the memory bandwidth of standard models.
+
 ## 🧠 Model Architecture
 
 The network follows a **LeNet-5** topology adapted for temporal spike processing. Each input sample is a sequence of **T=20 time bins** from the N-MNIST event camera (2 polarity channels, 28×28 spatial).
