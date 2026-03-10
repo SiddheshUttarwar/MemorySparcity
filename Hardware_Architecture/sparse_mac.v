@@ -4,8 +4,9 @@ module sparse_mac #(
 )(
     input wire clk,
     input wire rst_n,
-    input wire sys_en, // Top-level enable (halts completely on Early Exit)
-    input wire spike_in, // Input spike representing binary '1'
+    input wire sys_en,    // Top-level enable (halts completely on Early Exit)
+    input wire acc_clear,  // Reset accumulator (at time-step / neuron boundaries)
+    input wire spike_in,  // Input spike representing binary '1'
     input wire signed [DATA_WIDTH-1:0] weight_in,
     
     // We send read_req directly back to the SRAM core to awaken it
@@ -17,13 +18,16 @@ module sparse_mac #(
         if (!rst_n) begin
             current_out <= {ACCUM_WIDTH{1'b0}};
             read_req <= 1'b0;
+        end else if (acc_clear) begin
+            // Controller asserts acc_clear at neuron/time-step boundaries
+            current_out <= {ACCUM_WIDTH{1'b0}};
+            read_req <= 1'b0;
         end else if (sys_en) begin
             // Awake the SRAM solely if we have an incoming spike this cycle!
             read_req <= spike_in;
             
-            // Wait for SRAM to serve weight, then accumulate. 
             // Because SNN inputs are purely binary {0, 1}, we do not need physical 
-            // DSP multipliers! We just ADDer the weight if spike_in was true.
+            // DSP multipliers! We just ADD the weight if spike_in was true.
             if (spike_in) begin
                 current_out <= current_out + weight_in;
             end

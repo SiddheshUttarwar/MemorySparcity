@@ -20,7 +20,7 @@ module burst_redundancy #(
                 if (repeat_count < 3'd7) repeat_count <= repeat_count + 1;
             end else begin
                 last_pre_id <= pre_id;
-                repeat_count <= 3'd1;
+                repeat_count <= 3'd0;
             end
         end
     end

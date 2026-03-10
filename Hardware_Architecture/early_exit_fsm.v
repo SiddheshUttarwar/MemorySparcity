@@ -1,7 +1,7 @@
 module early_exit_fsm #(
     parameter NUM_CLASSES = 10,
     parameter T_MAX = 20,
-    parameter CONFIDENCE_TH = 12 // Spikes accumulated required to confidently halt clock
+    parameter CONFIDENCE_TH = 8 // Spikes accumulated required to confidently halt clock
 )(
     input wire clk,
     input wire rst_n,

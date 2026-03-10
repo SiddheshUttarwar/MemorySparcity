@@ -17,8 +17,11 @@ module importance_monitor #(
     
     integer i;
 
-    // Output is combinationally evaluated BEFORE the counter actually updates on posedge
-    assign imp_keep = (cnt[pre_id] >= THRESH) ? 1'b1 : 1'b0;
+    // Prospective counter value: includes the current spike's increment so
+    // the very first spike from a pixel is not rejected (cnt=0 -> prospective=1 >= THRESH)
+    wire [3:0] prospective_cnt = (spike_valid && cnt[pre_id] < 4'd15) ? 
+                                  cnt[pre_id] + 4'd1 : cnt[pre_id];
+    assign imp_keep = (prospective_cnt >= THRESH) ? 1'b1 : 1'b0;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
