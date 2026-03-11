@@ -225,36 +225,11 @@ which propagates to all upstream blocks (gatekeeper, SRAM, MAC, LIF), creating a
 \section{RTL Circuit Architecture}
 Each optimization is expressed as a synthesizable Verilog module. The complete hardware datapath is shown in Fig.~\ref{fig:rtl_architecture}.
 
-\begin{figure*}[t]
-\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-  node distance=1.15cm and 0.65cm,
-  block/.style={draw, rounded corners, minimum width=2.7cm, minimum height=0.9cm, align=center, font=\footnotesize},
-  line/.style={-{Latex[length=2mm]}, thick}
-]
-\node[block] (in) {Input Event\\($spike\_valid, pre\_id$)};
-\node[block, right=of in] (gk) {Dynamic Gatekeeper\\($gate\_keep, mem\_en, mac\_en$)};
-\node[block, right=of gk] (sram) {Quantized SRAM\\($re, addr, data\_out$)};
-\node[block, right=of sram] (mac) {Sparse MAC\\($spike\_in, weight\_in$)};
-\node[block, right=of mac] (lif) {Adaptive LIF\\($current\_in, v_{th}(t)$)};
-\node[block, right=of lif] (out) {Output Spikes\\($class\_spikes$)};
-\node[block, below=1.35cm of lif] (fsm) {Early-Exit FSM\\($score_c, terminate, sys\_enable$)};
-
-\draw[line] (in) -- (gk);
-\draw[line] (gk) -- node[above,font=\scriptsize] {$mem\_en$} (sram);
-\draw[line] (sram) -- node[above,font=\scriptsize] {$weight\_in$} (mac);
-\draw[line] (gk) |- node[pos=0.25,left,font=\scriptsize] {$mac\_en$} (mac);
-\draw[line] (mac) -- node[above,font=\scriptsize] {$current\_in$} (lif);
-\draw[line] (lif) -- (out);
-\draw[line] (out) |- (fsm);
-\draw[line] (fsm.west) -| node[pos=0.24,below,font=\scriptsize] {$sys\_enable$} (gk.south);
-\draw[line] (fsm.north) -- node[right,font=\scriptsize] {$sys\_enable$} (lif.south);
-\end{tikzpicture}
-}
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{rtl_architecture_placeholder.png}}
 \caption{Digital block architecture of the proposed sparse CSNN inference pipeline. The early-exit FSM closes the control loop via global $sys\_enable$ gating.}
 \label{fig:rtl_architecture}
-\end{figure*}
+\end{figure}
 
 \subsection{Signal Definitions}
 Table~\ref{tab:signals} lists the key signals in the hardware pipeline and their roles.
@@ -303,12 +278,11 @@ All Verilog modules are functionally verified using Icarus Verilog simulation wi
     \item \textbf{\texttt{sparse\_snn\_top.v}}: Top-level integration wiring all blocks into a single inference pipeline.
 \end{itemize}
 
-\begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{Hardware_Architecture/full_circuit_diagram.png}
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/full_circuit_diagram.png}}
 \caption{Complete circuit schematic of the sparse SNN inference pipeline showing internal components of each RTL block, signal routing, and the $sys\_enable$ feedback loop from the early-exit FSM.}
 \label{fig:full_circuit}
-\end{figure*}
+\end{figure}
 
 % ============================================================
 % VI. EXPERIMENTAL SETUP
