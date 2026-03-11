@@ -61,7 +61,7 @@ This project bridges that gap through a \textbf{hardware-first design objective}
     \item \textbf{Confidence-driven early exit:} An output-side FSM that monitors classification confidence and globally halts the inference pipeline once a decision threshold is crossed.
 \end{itemize}
 
-Critically, each mechanism is simultaneously implemented in PyTorch (for gradient-based training and large-scale evaluation) and in synthesizable Verilog RTL (for hardware deployment), ensuring that software-level accuracy and hardware-level efficiency are validated against the same dataflow. The full Verilog module set is provided in the repository, and hardware-proxy counters in the PyTorch forward pass produce metrics that map directly to RTL control signals.
+Critically, each mechanism is simultaneously implemented in PyTorch (for gradient-based training and large-scale evaluation) and in synthesizable RTL (for hardware deployment), ensuring that software-level accuracy and hardware-level efficiency are validated against the same dataflow. The full hardware module set is provided in the repository, and hardware-proxy counters in the PyTorch forward pass produce metrics that map directly to RTL control signals.
 
 % ============================================================
 % II. DATASET AND PREPROCESSING
@@ -205,14 +205,14 @@ V_{th,j}(t) + \rho, & \text{if } S_j(t) = 1 \\
 \max(V_{th,j}(t) - 1, V_{th}^{base}), & \text{otherwise}
 \end{cases}
 \end{equation}
-with the additive penalty $\rho$. This raises the threshold strictly when firing (making subsequent spikes harder) and decays it linearly toward baseline bounds (restoring sensitivity). In hardware, this is implemented using a single adder and comparator per neuron in the \texttt{adaptive\_lif.v} module. As noted, the membrane potential's leak approximation $V \times 0.9375$ is computed as $V - (V \gg 4)$, avoiding any DSP multipliers.
+with the additive penalty $\rho$. This raises the threshold strictly when firing (making subsequent spikes harder) and decays it linearly toward baseline bounds (restoring sensitivity). In hardware, this is implemented using a single adder and comparator per neuron in a specialized LIF module. As noted, the membrane potential's leak approximation $V \times 0.9375$ is computed as $V - (V \gg 4)$, avoiding any DSP multipliers.
 
 \subsection{INT8 Weight Quantization}
 All weights are quantized to 8-bit signed integers for SRAM storage using symmetric quantization:
 \begin{equation}
 \hat{W} = \text{clamp}\!\left(\text{round}\left( \frac{127}{\max|W|} \cdot W \right), -127, 127 \right).
 \end{equation}
-The quantized weights are exported to Verilog \texttt{.mem} hex files using two's complement representation, and loaded into the SRAM module via \texttt{\$readmemh} at simulation start.
+The quantized weights are exported to hex files using two's complement representation, and loaded into the SRAM module during simulation start.
 
 \subsection{Confidence-Driven Early Exit}
 The concept of dynamically terminating SNN inference to save timesteps has been explored algorithmically, notably in Spiking Early-Exit Neural Networks (SEENN)~\cite{li2023seenn}. SEENN relies on floating-point confidence score thresholding (e.g., softmax) to determine the exit point. In contrast, our hardware-first approach maps this concept directly into synthesizable RTL. A lightweight finite state machine monitors the output layer's spike accumulation across time without requiring complex floating-point abstraction. The digital hardware simply tracks absolute integer spike counts per class:
@@ -227,13 +227,12 @@ En_{sys}(t{+}1) =
 1, & \text{otherwise.}
 \end{cases}
 \end{equation}
-In the Verilog implementation (\texttt{early\_exit\_fsm.v}), $\theta_{conf}$ is set to 8. This shutdown signal propagates to all upstream blocks (gatekeeper, SRAM, MAC, LIF), creating a full-pipeline freeze. This is realized entirely with 10 integer accumulator registers and a combinational comparator, completely avoiding divisions, exponentials, or external memory reads for control traversal.
+In our digital hardware implementation, $\theta_{conf}$ is set to 8. This shutdown signal propagates to all upstream blocks (gatekeeper, SRAM, MAC, LIF), creating a full-pipeline freeze. This is realized entirely with 10 integer accumulator registers and a combinational comparator, completely avoiding divisions, exponentials, or external memory reads for control traversal.
 
 % ============================================================
 % V. RTL ARCHITECTURE
 % ============================================================
-\section{RTL Circuit Architecture}
-Each optimization is expressed as a synthesizable Verilog module. The complete hardware datapath is shown in Fig.~\ref{fig:rtl_architecture}.
+Each optimization is expressed as a synthesizable hardware module. The complete hardware datapath is shown in Fig.~\ref{fig:rtl_architecture}.
 
 \begin{figure}[htbp]
 \centerline{\includegraphics[width=0.5\linewidth]{Hardware_Architecture/full_circuit_diagram.png}}
@@ -276,16 +275,16 @@ $sys\_en$ & 1-bit global & Global execution enable; deasserted by early exit. \\
 \end{table}
 
 \subsection{Module Summary}
-All Verilog modules are functionally verified using Icarus Verilog simulation with VCD waveform dumps. The module set comprises:
+All hardware modules are functionally verified using RTL simulation with waveform dumps. The components include:
 \begin{itemize}
-    \item \textbf{\texttt{dynamic\_gatekeeper.v}}: Top-level gate combining importance and burst filters.
-    \item \textbf{\texttt{importance\_monitor.v}}: Saturating counter array with periodic right-shift decay.
-    \item \textbf{\texttt{burst\_redundancy.v}}: Consecutive duplicate spike suppression.
-    \item \textbf{\texttt{quantized\_sram.v}}: INT8 weight memory with gated read-enable. Supports \texttt{\$readmemh} from exported \texttt{.mem} files.
-    \item \textbf{\texttt{sparse\_mac.v}}: Spike-conditional accumulator (no DSP multiplier needed since SNN inputs are binary).
-    \item \textbf{\texttt{adaptive\_lif.v}}: Leaky integrator with shift-add leak approximation, comparator, and threshold adaptation register.
-    \item \textbf{\texttt{early\_exit\_fsm.v}}: 10-class accumulator with confidence comparator and global enable control.
-    \item \textbf{\texttt{sparse\_snn\_top.v}}: Top-level integration wiring all blocks into a single inference pipeline.
+    \item \textbf{Dynamic Gatekeeper}: Top-level gate combining importance and burst filters.
+    \item \textbf{Importance Monitor}: Saturating counter array with periodic right-shift decay.
+    \item \textbf{Burst Redundancy Filter}: Consecutive duplicate spike suppression.
+    \item \textbf{Quantized SRAM}: INT8 weight memory with gated read-enable. Supports initialization from exported hex files.
+    \item \textbf{Sparse MAC}: Spike-conditional accumulator (no DSP multiplier needed since SNN inputs are binary).
+    \item \textbf{Adaptive LIF}: Leaky integrator with shift-add leak approximation, comparator, and threshold adaptation register.
+    \item \textbf{Early-Exit FSM}: 10-class accumulator with confidence comparator and global enable control.
+    \item \textbf{Top-Level Integration}: Wiring all blocks into a single inference pipeline.
 \end{itemize}
 
 
@@ -424,7 +423,7 @@ These mechanisms compound multiplicatively, as internal spikes from early timest
 \section{Conclusion}
 This work demonstrates that hardware-aware control logic in SNN inference can deliver substantial practical efficiency gains beyond algorithmic sparsity alone. By combining input-side event filtering (dynamic gatekeeping), internal activity regulation (adaptive thresholds), and output-side temporal truncation (early exit), the proposed design reduces SRAM read traffic by 81.6\%, energy by 81.6\%, and average latency by 1.8$\times$, while maintaining 90.8\% test accuracy on N-MNIST.
 
-The primary contribution is not a new neuron model, but a \textbf{deployment-oriented control strategy} that links SNN behavior to digital hardware costs through co-designed PyTorch hooks and synthesizable Verilog RTL. Each optimization targets the dominant energy consumer in CMOS digital inference: memory access. The complete Verilog module set (gatekeeper, SRAM, MAC, adaptive LIF, early-exit FSM, top-level integration) has been functionally verified through Icarus Verilog simulation and is provided for direct synthesis onto FPGA or ASIC flows.
+The primary contribution is not a new neuron model, but a \textbf{deployment-oriented control strategy} that links SNN behavior to digital hardware costs through co-designed PyTorch hooks and synthesizable RTL. Each optimization targets the dominant energy consumer in CMOS digital inference: memory access. The complete digital hardware design (gatekeeper, SRAM, MAC, adaptive LIF, early-exit FSM, top-level integration) has been functionally verified through RTL simulation and is provided for direct synthesis onto FPGA or ASIC flows.
 
 Future work includes: (i) FPGA synthesis and place-and-route via Xilinx Vivado to obtain actual area, power, and maximum frequency characterization, (ii) extending the gatekeeper to deeper layers for multi-stage filtering, (iii) learned confidence thresholds that adapt per-class difficulty, and (iv) evaluation on larger neuromorphic datasets (DVS-CIFAR10, N-Caltech101).
 
