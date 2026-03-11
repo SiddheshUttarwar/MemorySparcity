@@ -187,10 +187,22 @@ Because sensory event streams are inherently noisy and highly redundant in the t
 \end{figure}
 
 \subsubsection{Importance Monitor}
-The first sub-circuit filters spatial noise by tracking the firing frequency of each pixel. A 4-bit saturating counter array $I[c,y,x]$ maintains the cumulative activity at each spatial position. To emulate a leaky integration without complex multipliers, a global timer shifts (divides-by-2) all counters every $W{=}255$ clock cycles. An event is classified as ``important'' (granting $Keep_{imp} = 1$) only if $I[\text{pre\_id}] \ge \theta_{\text{imp}}$ where $\theta_{\text{imp}}=1$. This effectively drops isolated background noise that does not recur at the same spatial location.
+The first sub-circuit filters spatial noise by tracking the firing frequency of each pixel. A 4-bit saturating counter array $I[c,y,x]$ maintains the cumulative activity at each spatial position. To emulate a leaky integration without complex multipliers, a global timer shifts (divides-by-2) all counters every $W{=}255$ clock cycles. An event is classified as ``important'' (granting $Keep_{imp} = 1$) only if $I[\text{pre\_id}] \ge \theta_{\text{imp}}$ where $\theta_{\text{imp}}=1$. This effectively drops isolated background noise that does not recur at the same spatial location. (See Fig.~\ref{fig:importance_monitor}).
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.5\linewidth]{circuit_importance_monitor.png}}
+\caption{Importance Monitor logic. It evaluates incoming spike frequencies against a periodic decay to drop spatially isolated noise.}
+\label{fig:importance_monitor}
+\end{figure}
 
 \subsubsection{Burst Redundancy Filter}
-The second sub-circuit targets temporal redundancy. Event cameras often produce rapid bursts of spikes for a single contrasting edge. A hardware comparator tracks \texttt{last\_pre\_id} alongside a 3-bit \texttt{repeat\_count}. Consecutive identical spikes from the same pixel beyond a threshold $K_{\max}=1$ are suppressed ($Keep_{corr}=0$), as they carry no novel temporal information for the network but would otherwise unnecessarily re-trigger the same memory fetches.
+The second sub-circuit targets temporal redundancy. Event cameras often produce rapid bursts of spikes for a single contrasting edge. A hardware comparator tracks \texttt{last\_pre\_id} alongside a 3-bit \texttt{repeat\_count}. Consecutive identical spikes from the same pixel beyond a threshold $K_{\max}=1$ are suppressed ($Keep_{corr}=0$), as they carry no novel temporal information for the network but would otherwise unnecessarily re-trigger the same memory fetches. (See Fig.~\ref{fig:burst_redundancy}).
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.5\linewidth]{circuit_burst_redundancy.png}}
+\caption{Burst Redundancy Filter logic. It prevents rapid re-triggering of memory fetches for consecutive spikes at the exact same spatial address.}
+\label{fig:burst_redundancy}
+\end{figure}
 
 \subsubsection{Gate Decision}
 Let $Gate$ represent the combinational gatekeeper decision. The boolean logic is:
@@ -236,7 +248,13 @@ En_{sys}(t{+}1) =
 1, & \text{otherwise.}
 \end{cases}
 \end{equation}
-In our digital hardware implementation, $\theta_{conf}$ is set to 8. This shutdown signal propagates to all upstream blocks (gatekeeper, SRAM, MAC, LIF), creating a full-pipeline freeze. This is realized entirely with 10 integer accumulator registers and a combinational comparator, completely avoiding divisions, exponentials, or external memory reads for control traversal.
+In our digital hardware implementation, $\theta_{conf}$ is set to 8. This shutdown signal propagates to all upstream blocks (gatekeeper, SRAM, MAC, LIF), creating a full-pipeline freeze. This is realized entirely with 10 integer accumulator registers and a combinational comparator, completely avoiding divisions, exponentials, or external memory reads for control traversal. (See Fig.~\ref{fig:early_exit_fsm}).
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.5\linewidth]{circuit_early_exit_fsm.png}}
+\caption{Early-Exit FSM architecture showing the 10-class integer accumulator and confidence comparator that generates the global pipeline freeze signal.}
+\label{fig:early_exit_fsm}
+\end{figure}
 
 % ============================================================
 % V. RTL ARCHITECTURE
