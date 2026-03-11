@@ -86,9 +86,15 @@ b_i = \text{clip}\!\left(\left\lfloor \frac{t_i - t_{\min}}{t_{\max} - t_{\min}}
 Polarity channels are preserved, yielding input spike tensors of shape $(T, 2, 28, 28)$. This representation maintains temporal structure while enabling batched training and hardware-style stepwise execution.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{plots/preprocessing_pipeline.png}}
+\centerline{\includegraphics[width=0.5\linewidth]{plots/preprocessing_pipeline.png}}
 \caption{Preprocessing flow: raw AER events $\rightarrow$ spatial cropping $\rightarrow$ temporal binning $\rightarrow$ binary spike tensors.}
 \label{fig:preprocessing}
+\end{figure}
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.5\linewidth]{plots/digit_3_raster.png}}
+\caption{Raster plot of a processed N-MNIST digit ``3''. The temporal binning preserves the asynchronous spikes (ON/OFF polarities) into $T=20$ discrete execution steps for the hardware pipeline.}
+\label{fig:raster_plot}
 \end{figure}
 
 % ============================================================
@@ -209,7 +215,7 @@ All weights are quantized to 8-bit signed integers for SRAM storage using symmet
 The quantized weights are exported to Verilog \texttt{.mem} hex files using two's complement representation, and loaded into the SRAM module via \texttt{\$readmemh} at simulation start.
 
 \subsection{Confidence-Driven Early Exit}
-A lightweight finite state machine monitors the output layer's spike accumulation across time. Instead of requiring complex floating-point softmax operations, the digital hardware simply tracks absolute spike counts per class:
+The concept of dynamically terminating SNN inference to save timesteps has been explored algorithmically, notably in Spiking Early-Exit Neural Networks (SEENN)~\cite{li2023seenn}. SEENN relies on floating-point confidence score thresholding (e.g., softmax) to determine the exit point. In contrast, our hardware-first approach maps this concept directly into synthesizable RTL. A lightweight finite state machine monitors the output layer's spike accumulation across time without requiring complex floating-point abstraction. The digital hardware simply tracks absolute integer spike counts per class:
 \begin{equation}
 C_k(t) = \sum_{\tau=0}^{t} S_k^{(out)}(\tau).
 \end{equation}
@@ -452,6 +458,11 @@ G. Orchard, A. Jayawant, G. K. Cohen, and N. Thakor,
 G. Bellec, D. Salaj, A. Subramoney, R. Legenstein, and W. Maass,
 ``Long short-term memory and learning-to-learn in networks of spiking neurons,''
 \textit{Advances in Neural Information Processing Systems (NeurIPS)}, pp. 787--797, 2018.
+
+\bibitem{li2023seenn}
+Y. Li, T. Geller, Y. Kim, and P. Panda,
+``SEENN: Towards temporal spiking early-exit neural networks,''
+\textit{Advances in Neural Information Processing Systems (NeurIPS)}, vol. 36, 2023.
 \end{thebibliography}
 
 \end{document}
