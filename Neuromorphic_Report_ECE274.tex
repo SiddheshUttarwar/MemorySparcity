@@ -142,7 +142,7 @@ The membrane potential update at timestep $t$ is
 V_j(t) = \beta \cdot V_j(t{-}1) + X_j(t),
 \label{eq:lif}
 \end{equation}
-where $\beta=0.9$ is the leak factor, and $X_j(t)$ is the synaptic input current after batch normalization. Spiking follows a Heaviside threshold:
+where $\beta = 1 - 2^{-4} = 0.9375$ is the hardware-friendly leak factor, and $X_j(t)$ is the synaptic input current after batch normalization. Spiking follows a Heaviside threshold:
 \begin{equation}
 S_j(t) =
 \begin{cases}
@@ -180,44 +180,48 @@ A 4-bit saturating counter array $I[c,y,x]$ tracks cumulative activity at each s
 A comparator tracks \texttt{last\_pre\_id} and a 3-bit \texttt{repeat\_count}. Consecutive identical spikes beyond $K_{\max}=1$ are suppressed, as they carry no new temporal information.
 
 \subsubsection{Gate Decision}
-The combined gate logic is:
+Let $Gate$ represent the combinational gatekeeper decision. The boolean logic is:
 \begin{equation}
-gate\_keep = global\_en \land spike\_valid \land imp\_keep \land corr\_keep,
+Gate = En_{sys} \land S_{in} \land \text{Keep}_{imp} \land \text{Keep}_{corr},
 \end{equation}
-with direct signal routing:
+which directly drives the downstream unit enables:
 \begin{equation}
-mem\_en = gate\_keep, \quad mac\_en = gate\_keep.
+En_{mem} = Gate, \quad En_{mac} = Gate.
 \end{equation}
-When $gate\_keep=0$, the SRAM read-enable is not asserted and the MAC unit remains idle---no switching activity occurs, saving dynamic power proportional to the rejection rate.
+When $Gate=0$, the SRAM read-enable is not asserted and the MAC unit remains idle---no switching activity occurs, saving dynamic power proportional to the rejection rate.
 
 \subsection{Adaptive Threshold Regulation}
-To prevent spike storms in hidden layers, each neuron's threshold adapts based on firing history:
+To prevent spike storms in hidden layers, each neuron's threshold adapts based on firing history using hardware-efficient additions and subtractions rather than multiplications:
 \begin{equation}
-V_{th,j}(t{+}1) = V_{th}^{base} + 0.9 \left[ (V_{th,j}(t) + \rho \cdot S_j(t)) - V_{th}^{base} \right],
+V_{th,j}(t{+}1) = 
+\begin{cases}
+V_{th,j}(t) + \rho, & \text{if } S_j(t) = 1 \\
+\max(V_{th,j}(t) - 1, V_{th}^{base}), & \text{otherwise}
+\end{cases}
 \end{equation}
-with $\rho=0.1$. This raises the threshold after firing (making subsequent spikes harder) and decays it toward baseline (restoring sensitivity). In hardware, this is implemented using a single adder, comparator, and shift register per neuron in the \texttt{adaptive\_lif.v} module. The leak approximation $V \times 0.9375$ is computed as $V - (V \gg 4)$, avoiding any multiplier.
+with the additive penalty $\rho$. This raises the threshold strictly when firing (making subsequent spikes harder) and decays it linearly toward baseline bounds (restoring sensitivity). In hardware, this is implemented using a single adder and comparator per neuron in the \texttt{adaptive\_lif.v} module. As noted, the membrane potential's leak approximation $V \times 0.9375$ is computed as $V - (V \gg 4)$, avoiding any DSP multipliers.
 
 \subsection{INT8 Weight Quantization}
 All weights are quantized to 8-bit signed integers for SRAM storage using symmetric quantization:
 \begin{equation}
-\hat{W} = \text{clamp}\!\left(\left\lfloor \frac{127}{\max|W|} \cdot W \right\rceil, -127, 127 \right).
+\hat{W} = \text{clamp}\!\left(\text{round}\left( \frac{127}{\max|W|} \cdot W \right), -127, 127 \right).
 \end{equation}
 The quantized weights are exported to Verilog \texttt{.mem} hex files using two's complement representation, and loaded into the SRAM module via \texttt{\$readmemh} at simulation start.
 
 \subsection{Confidence-Driven Early Exit}
-A lightweight finite state machine monitors the output layer's spike accumulation across time. At each timestep $t \ge 3$, the cumulative firing rate per class is computed:
+A lightweight finite state machine monitors the output layer's spike accumulation across time. Instead of requiring complex floating-point softmax operations, the digital hardware simply tracks absolute spike counts per class:
 \begin{equation}
-\bar{r}_k(t) = \frac{1}{t+1} \sum_{\tau=0}^{t} S_k^{(out)}(\tau),
+C_k(t) = \sum_{\tau=0}^{t} S_k^{(out)}(\tau).
 \end{equation}
-and a temperature-scaled softmax ($\tau=5.0$) yields class confidence:
+Confidence is reached when the running spike count for any class surpasses a fixed integer threshold, $\theta_{conf}$:
 \begin{equation}
-p_k(t) = \frac{\exp(\tau \cdot \bar{r}_k(t))}{\sum_j \exp(\tau \cdot \bar{r}_j(t))}.
+En_{sys}(t{+}1) =
+\begin{cases}
+0, & \text{if } \max_k C_k(t) \ge \theta_{conf} \\
+1, & \text{otherwise.}
+\end{cases}
 \end{equation}
-When $\max_k p_k(t) > \theta_{conf}$ (with $\theta_{conf}=0.9$), the controller deasserts the global \texttt{sys\_enable} signal:
-\begin{equation}
-sys\_en(t{+}1) = 0,
-\end{equation}
-which propagates to all upstream blocks (gatekeeper, SRAM, MAC, LIF), creating a full-pipeline shutdown. In the Verilog implementation (\texttt{early\_exit\_fsm.v}), this is realized with 10 class accumulator registers and a combinational comparator against a spike-count threshold of 8.
+In the Verilog implementation (\texttt{early\_exit\_fsm.v}), $\theta_{conf}$ is set to 8. This shutdown signal propagates to all upstream blocks (gatekeeper, SRAM, MAC, LIF), creating a full-pipeline freeze. This is realized entirely with 10 integer accumulator registers and a combinational comparator, completely avoiding divisions, exponentials, or external memory reads for control traversal.
 
 % ============================================================
 % V. RTL ARCHITECTURE
