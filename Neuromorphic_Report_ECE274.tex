@@ -339,13 +339,7 @@ In a hardware setting, the transfer of spikes between layers (e.g., from Conv1 t
 \label{fig:multi_tile_noc}
 \end{figure}
 
-\begin{figure}[htbp]
-\centerline{\includegraphics[width=0.98\linewidth]{Hardware_Architecture/ping_pong_diagram_rtl.png}}
-\caption{RTL architecture of the Ping-Pong Spike Buffer instantiated between hardware tiles. Spikes are written to Bank A during timestep $T$, and are immediately available to the downstream layer for read access in $T+1$ while Bank B begins buffering.}
-\label{fig:ping_pong_rtl}
-\end{figure}
-
-As shown in the RTL layout in Fig.~\ref{fig:ping_pong_rtl}, each tile encapsulates its local SRAM, a MAC unit, and LIF neurons. When a spike is generated, its address ID is explicitly stored in an inter-layer \textbf{Ping-Pong Spike Buffer}. Because biological-style spiking is profoundly sparse, this inter-layer buffer only needs to be a small 256-element FIFO queue per active bank. 
+As shown in the system layout in Fig.~\ref{fig:multi_tile_noc}, each tile encapsulates its local SRAM, a MAC unit, and LIF neurons. When a spike is generated, its address ID is explicitly stored in an inter-layer \textbf{Ping-Pong Spike Buffer}. Because biological-style spiking is profoundly sparse, this inter-layer buffer only needs to be a small 256-element FIFO queue per active bank. 
 
 By employing a double-buffering (Ping-Pong) strategy, pipeline saturation is strictly avoided: during timestep $T$, Conv1 pushes sparse spike addresses into Buffer A. When the global execution clock advances to the next timestep ($T+1$), the control finite state machine swaps the active bank. Conv2 reads the spike addresses from Buffer A and uses them to index its local Conv2 SRAM bank, while Conv1 simultaneously begins writing the new batch of $T+1$ spikes into Buffer B. This asynchronous tile-to-tile routing allows maximum pipeline utilization rates.
 
