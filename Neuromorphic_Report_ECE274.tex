@@ -334,9 +334,9 @@ All proposed hardware blocks were developed and validated through Python-based d
 In a hardware setting, the transfer of spikes between layers (e.g., from Conv1 to Conv2) presents a routing challenge. To address this iteratively, the datapath maps naturally into a tile-based Network-on-Chip (NoC), effectively bypassing any centralized memory bottleneck. 
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/snn_tile_diagram.png}}
-\caption{RTL Block Diagram of a single SNN Hardware Tile. Each tile encapsulates a local SRAM weight bank, sparse MAC unit, LIF neuron array, and a spike routing interface, functioning as an independent unified execution engine on the NoC.}
-\label{fig:snn_tile_rtl}
+\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/multi_tile_noc_diagram.png}}
+\caption{System-level block diagram of the Multi-Tile Network-on-Chip (NoC) architecture. Multiple SNN tiles (each containing local SRAM, MAC, and LIF arrays) are interconnected via a central routing mesh. Ping-Pong Spike Buffers sit between the routing mesh and the tiles to broker asynchronous spike transfer between sequential execution timesteps.}
+\label{fig:multi_tile_noc}
 \end{figure}
 
 \begin{figure}[htbp]
