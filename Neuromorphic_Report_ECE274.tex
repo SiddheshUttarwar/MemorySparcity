@@ -226,7 +226,7 @@ which propagates to all upstream blocks (gatekeeper, SRAM, MAC, LIF), creating a
 Each optimization is expressed as a synthesizable Verilog module. The complete hardware datapath is shown in Fig.~\ref{fig:rtl_architecture}.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{rtl_architecture_placeholder.png}}
+\centerline{\includegraphics[width=0.5\linewidth]{Hardware_Architecture/full_circuit_diagram.png}}
 \caption{Digital block architecture of the proposed sparse CSNN inference pipeline. The early-exit FSM closes the control loop via global $sys\_enable$ gating.}
 \label{fig:rtl_architecture}
 \end{figure}
@@ -278,11 +278,7 @@ All Verilog modules are functionally verified using Icarus Verilog simulation wi
     \item \textbf{\texttt{sparse\_snn\_top.v}}: Top-level integration wiring all blocks into a single inference pipeline.
 \end{itemize}
 
-\begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/full_circuit_diagram.png}}
-\caption{Complete circuit schematic of the sparse SNN inference pipeline showing internal components of each RTL block, signal routing, and the $sys\_enable$ feedback loop from the early-exit FSM.}
-\label{fig:full_circuit}
-\end{figure}
+
 
 % ============================================================
 % VI. EXPERIMENTAL SETUP
