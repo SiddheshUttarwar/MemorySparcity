@@ -39,7 +39,7 @@ Email: parthkulkarni@ucsb.edu}
 % ABSTRACT
 % ============================================================
 \begin{abstract}
-Spiking Neural Networks (SNNs) are attractive for edge inference due to their event-driven sparsity, yet practical energy savings are often limited by memory traffic and fixed-latency execution. This paper presents a hardware-software co-designed convolutional SNN (CSNN) inference pipeline that combines three orthogonal optimizations: (i) a dynamic gatekeeper that suppresses low-information and redundant spike events before any memory access, (ii) adaptive LIF thresholding per neuron to enforce temporal sparsity, and (iii) a confidence-driven early exit controller that terminates inference once classification certainty is reached. Each optimization is simultaneously expressed in PyTorch (for training and validation) and as synthesizable Verilog RTL (for hardware deployment). Evaluated over 500 test samples on N-MNIST with INT8-quantized weights, the proposed sparse design achieves 90.8\% accuracy (vs. 97.6\% baseline), reduces average SRAM reads from 70,824 to 13,002 per inference (81.6\% reduction), cuts inference energy from 368~pJ to 68~pJ (81.6\% savings at 45nm), and lowers average latency from 200~ns to 114~ns (1.8$\times$ speedup at 100~MHz). The gatekeeper independently rejects 23.9\% of input events, and early exit triggers at an average of $T$=11.4 instead of the full $T$=20 window. These results demonstrate that hardware-aware control logic can deliver substantial energy and latency improvements beyond algorithmic sparsity alone, making the approach directly applicable to low-power neuromorphic edge accelerators.
+Spiking Neural Networks (SNNs) are attractive for edge inference due to their event-driven sparsity, yet practical energy savings are often limited by memory traffic and fixed-latency execution. This paper presents a hardware-software co-designed convolutional SNN (CSNN) inference pipeline that combines three orthogonal optimizations: (i) a dynamic gatekeeper that suppresses low-information and redundant spike events before any memory access, (ii) adaptive LIF thresholding per neuron to enforce temporal sparsity, and (iii) a confidence-driven early exit controller that terminates inference once classification certainty is reached. Each optimization is simultaneously expressed in PyTorch (for training and validation) and as synthesizable Verilog RTL (for hardware deployment). Evaluated over 500 test samples on N-MNIST with INT8-quantized weights, the proposed sparse design achieves 90.8\% accuracy (vs. 97.6\% baseline), reduces average SRAM reads from 70,824 to 13,002 per inference (81.6\% reduction), and lowers estimated inference energy from 368~pJ to 68~pJ based on published 45nm CMOS access costs. The gatekeeper independently rejects 23.9\% of input events, and early exit triggers at an average of $T$=11.4 instead of the full $T$=20 window. The complete hardware pipeline is functionally verified through Icarus Verilog simulation of synthesizable RTL modules. These results demonstrate that hardware-aware control logic can deliver substantial efficiency improvements beyond algorithmic sparsity alone, making the approach directly applicable to low-power neuromorphic edge accelerators.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -50,7 +50,7 @@ Spiking Neural Networks, Neuromorphic Hardware, Event-Driven Computing, Dynamic 
 % I. INTRODUCTION
 % ============================================================
 \section{Introduction}
-Energy efficiency is the central constraint in deploying neural networks at the edge. While Spiking Neural Networks (SNNs) promise theoretical sparsity through event-driven computation, deployed systems still incur high cost when data movement and control are not explicitly co-designed with the model. In digital implementations running on CMOS, SRAM access dominates both power and latency budgets~\cite{horowitz2014energy}. A single 8-bit SRAM read at 45nm costs approximately 5~pJ---170$\times$ more energy than an integer addition---making memory traffic the primary optimization target.
+Energy efficiency is the central constraint in deploying neural networks at the edge. While Spiking Neural Networks (SNNs) promise theoretical sparsity through event-driven computation, deployed systems still incur high cost when data movement and control are not explicitly co-designed with the model. In digital implementations running on CMOS, SRAM access dominates both power and latency budgets~\cite{horowitz2014energy}. According to published CMOS energy data~\cite{horowitz2014energy}, a single 8-bit SRAM read at 45nm costs approximately 5~pJ---170$\times$ more energy than an integer addition---making memory traffic the primary optimization target in any digital SNN accelerator.
 
 Prior work on SNNs has focused on algorithmic improvements such as surrogate gradient training~\cite{neftci2019surrogate}, temporal coding~\cite{zenke2021remarkable}, and threshold adaptation~\cite{bellec2018long}. However, these approaches rarely quantify their impact on hardware-level metrics like SRAM read counts, memory-port utilization, or inference latency in clock cycles. As a result, the connection between ``sparse model'' and ``energy-efficient hardware'' remains qualitative.
 
@@ -291,7 +291,7 @@ $sys\_en$ & 1-bit global & Global execution enable; deasserted by early exit. \\
 \end{table}
 
 \subsection{Module Summary}
-The Verilog module set comprises:
+All Verilog modules are functionally verified using Icarus Verilog simulation with VCD waveform dumps. The module set comprises:
 \begin{itemize}
     \item \textbf{\texttt{dynamic\_gatekeeper.v}}: Top-level gate combining importance and burst filters.
     \item \textbf{\texttt{importance\_monitor.v}}: Saturating counter array with periodic right-shift decay.
@@ -328,12 +328,12 @@ Hardware-proxy metrics are collected through forward hooks embedded in the PyTor
     \item \textbf{Cumulative SRAM reads over time}: Recorded at each timestep for the temporal profile plots.
 \end{itemize}
 
-\subsection{Energy and Latency Model}
-Energy estimation follows the CMOS energy model from Horowitz~\cite{horowitz2014energy}:
+\subsection{Energy and Latency Estimation}
+Since we perform functional simulation (Icarus Verilog) rather than post-synthesis power analysis, energy is \textit{estimated} using published CMOS access costs from Horowitz~\cite{horowitz2014energy}:
 \begin{equation}
 E_{total} = \sum_{t=0}^{t^*} \left[ N_{reads}(t) \cdot E_{SRAM} + N_{MAC}(t) \cdot E_{MAC} \right],
 \end{equation}
-where $E_{SRAM} = 5$~pJ (32KB bank, 45nm) and $E_{MAC} = 0.2$~pJ (8-bit integer). Latency is computed as $L = t^* \times t_{cycle}$ where $t_{cycle} = 10$~ns (100~MHz clock).
+where $E_{SRAM} = 5$~pJ (32KB bank, 45nm) and $E_{MAC} = 0.2$~pJ (8-bit integer) are literature values, not measured. These estimates assume each spike-triggered SRAM access incurs a full read-port activation. Latency is estimated as $L = t^* \times t_{cycle}$ where $t_{cycle} = 10$~ns (assumed 100~MHz clock), representing the number of timesteps required rather than gate-level critical path delay.
 
 \subsection{Evaluation Protocol}
 All results are computed over $N=500$ randomly selected test samples with a fixed random seed for reproducibility. Both baseline and sparse models process the same samples to ensure fair comparison.
@@ -346,26 +346,8 @@ All results are computed over $N=500$ randomly selected test samples with a fixe
 \subsection{Overall Performance Comparison}
 Table~\ref{tab:hw_metrics} summarizes the key metrics across 500 test inferences. The sparse design achieves an 81.6\% reduction in SRAM reads with a 6.8 percentage point accuracy trade-off.
 
-\begin{table}[t]
-\caption{Baseline vs.\ Sparse SNN -- Hardware Metrics ($N$=500)}
-\centering
-\small
-\begin{tabular}{lcc}
-\toprule
-\textbf{Metric} & \textbf{Baseline} & \textbf{Sparse} \\
-\midrule
-Accuracy (\%) & 97.6 & 90.8 \\
-Avg SRAM Reads & 70,824 $\pm$ 12,009 & 13,002 $\pm$ 5,203 \\
-Reads Saved (\%) & --- & 81.6 $\pm$ 6.5 \\
-GK Rejection (\%) & 0 & 23.9 $\pm$ 6.7 \\
-Exit Timestep & 20 (fixed) & 11.4 $\pm$ 7.3 \\
-Firing Rate (\%) & 8.922 & 3.559 \\
-Energy (pJ) & 368,286 $\pm$ 62K & 67,613 $\pm$ 27K \\
-Latency (ns) & 200 & 114 $\pm$ 73 \\
-\bottomrule
-\end{tabular}
-\label{tab:hw_metrics}
-\end{table}
+% Auto-generated table from generate_publication_results.py
+\input{results/latex_table.tex}
 
 \subsection{Cumulative SRAM Reads Over Time}
 Figure~\ref{fig:cumulative} shows the average cumulative SRAM reads across all 500 samples as a function of time step. The baseline accumulates reads linearly through all $T=20$ steps, while the sparse design's curve flattens around $T=11$ as early exit halts processing. The shaded region represents the aggregate memory savings.
@@ -389,25 +371,25 @@ Figure~\ref{fig:exit_hist} shows the distribution of early exit timesteps. Easy 
 Figure~\ref{fig:gatekeeper} illustrates the gatekeeper's input filtering effect. On average, 23.9\% of input spike events are rejected before any SRAM access occurs. The donut chart shows the kept/rejected ratio, and the bar chart quantifies the absolute spike counts.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{results/fig3_gatekeeper_bar.png}}
+\centerline{\includegraphics[width=0.5\linewidth]{results/fig3_gatekeeper_bar.png}}
 \caption{Dynamic gatekeeper breakdown: kept vs. rejected input spikes. Each rejected spike prevents one SRAM read and one MAC cycle.}
 \label{fig:gatekeeper}
 \end{figure}
 
 \subsection{Energy Comparison}
-Figure~\ref{fig:energy} shows the per-inference energy breakdown at 45nm CMOS. SRAM access dominates both designs (96\% of total energy), validating the focus on memory traffic reduction. The sparse design achieves 81.6\% energy savings, reducing total energy from 368~pJ to 68~pJ.
+Figure~\ref{fig:energy} shows the \textit{estimated} per-inference energy breakdown using published 45nm CMOS access costs~\cite{horowitz2014energy}. SRAM access dominates both designs (96\% of estimated total energy), validating the focus on memory traffic reduction. The sparse design achieves an estimated 81.6\% energy savings, reducing estimated total energy from 368~pJ to 68~pJ. We note that these are analytical estimates based on read-event counts, not post-synthesis power measurements.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{results/fig4_energy_comparison.png}}
+\centerline{\includegraphics[width=0.5\linewidth]{results/fig4_energy_comparison.png}}
 \caption{Energy decomposition: SRAM access (red) vs. MAC compute (purple) for baseline and sparse designs. SRAM dominates total energy in both configurations.}
 \label{fig:energy}
 \end{figure}
 
 \subsection{Latency and Throughput}
-Figure~\ref{fig:latency} presents the latency and throughput comparison. At 100~MHz, the baseline requires a fixed 200~ns per inference, while the sparse design averages 114~ns (1.8$\times$ speedup), with the potential for up to 2.9$\times$ speedup on easy inputs that exit at $T\approx7$.
+Figure~\ref{fig:latency} presents the latency and throughput comparison. Assuming a 100~MHz clock (one timestep per clock cycle), the baseline requires a fixed 200~ns per inference (20 timesteps), while the sparse design averages 114~ns (1.8$\times$ speedup based on timestep reduction), with the potential for up to 2.9$\times$ speedup on easy inputs that exit at $T\approx7$. Actual latency would depend on synthesis-level clock frequency achievable on the target FPGA or ASIC.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{results/fig5_latency_speedup.png}}
+\centerline{\includegraphics[width=0.5\linewidth]{results/fig5_latency_speedup.png}}
 \caption{Inference latency (left) and throughput (right) comparison at 100~MHz. The speedup is input-dependent, with easy digits achieving higher improvement.}
 \label{fig:latency}
 \end{figure}
@@ -416,7 +398,7 @@ Figure~\ref{fig:latency} presents the latency and throughput comparison. At 100~
 Figure~\ref{fig:firing} compares per-layer firing rates between the baseline and sparse designs. The adaptive threshold and spike regularization reduce firing activity across all layers, with the most significant suppression in the early convolutional layers where the neuron count---and therefore the potential memory traffic---is highest.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{results/fig6_firing_rate.png}}
+\centerline{\includegraphics[width=0.5\linewidth]{results/fig6_firing_rate.png}}
 \caption{Per-layer average firing rate. The sparse design reduces neuronal activity across all layers, with the largest absolute reduction in Conv1 (25,088 neurons) and Conv2 (12,544 neurons).}
 \label{fig:firing}
 \end{figure}
@@ -425,7 +407,7 @@ Figure~\ref{fig:firing} compares per-layer firing rates between the baseline and
 Figure~\ref{fig:scatter} displays the relationship between early exit timestep and SRAM read savings for each of the 500 test samples, color-coded by digit class. Samples that exit early achieve the highest savings (up to 95\%), while samples requiring full $T=20$ processing still benefit from gatekeeper filtering (achieving $\sim$40\% savings from input-side rejection alone).
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{results/fig7_savings_scatter.png}}
+\centerline{\includegraphics[width=0.5\linewidth]{results/fig7_savings_scatter.png}}
 \caption{Per-sample SRAM savings vs. exit timestep, colored by digit class. The negative correlation confirms that early exit is the dominant savings mechanism, with gatekeeper rejection providing a baseline floor of $\sim$40\% savings even without early exit.}
 \label{fig:scatter}
 \end{figure}
@@ -445,9 +427,9 @@ These mechanisms compound multiplicatively, as internal spikes from early timest
 \section{Conclusion}
 This work demonstrates that hardware-aware control logic in SNN inference can deliver substantial practical efficiency gains beyond algorithmic sparsity alone. By combining input-side event filtering (dynamic gatekeeping), internal activity regulation (adaptive thresholds), and output-side temporal truncation (early exit), the proposed design reduces SRAM read traffic by 81.6\%, energy by 81.6\%, and average latency by 1.8$\times$, while maintaining 90.8\% test accuracy on N-MNIST.
 
-The primary contribution is not a new neuron model, but a \textbf{deployment-oriented control strategy} that links SNN behavior to digital hardware costs through co-designed PyTorch hooks and synthesizable Verilog RTL. Each optimization targets the dominant energy consumer in CMOS digital inference: memory access. The complete Verilog module set (gatekeeper, SRAM, MAC, adaptive LIF, early-exit FSM, top-level integration) is provided, enabling direct synthesis onto FPGA or ASIC flows.
+The primary contribution is not a new neuron model, but a \textbf{deployment-oriented control strategy} that links SNN behavior to digital hardware costs through co-designed PyTorch hooks and synthesizable Verilog RTL. Each optimization targets the dominant energy consumer in CMOS digital inference: memory access. The complete Verilog module set (gatekeeper, SRAM, MAC, adaptive LIF, early-exit FSM, top-level integration) has been functionally verified through Icarus Verilog simulation and is provided for direct synthesis onto FPGA or ASIC flows.
 
-Future work includes: (i) FPGA synthesis with area/power/timing characterization via Vivado, (ii) extending the gatekeeper to deeper layers for multi-stage filtering, (iii) learned confidence thresholds that adapt per-class difficulty, and (iv) evaluation on larger neuromorphic datasets (DVS-CIFAR10, N-Caltech101).
+Future work includes: (i) FPGA synthesis and place-and-route via Xilinx Vivado to obtain actual area, power, and maximum frequency characterization, (ii) extending the gatekeeper to deeper layers for multi-stage filtering, (iii) learned confidence thresholds that adapt per-class difficulty, and (iv) evaluation on larger neuromorphic datasets (DVS-CIFAR10, N-Caltech101).
 
 \begin{thebibliography}{00}
 \bibitem{horowitz2014energy}
