@@ -86,13 +86,13 @@ b_i = \text{clip}\!\left(\left\lfloor \frac{t_i - t_{\min}}{t_{\max} - t_{\min}}
 Polarity channels are preserved, yielding input spike tensors of shape $(T, 2, 28, 28)$. This representation maintains temporal structure while enabling batched training and hardware-style stepwise execution.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.5\linewidth]{plots/preprocessing_pipeline.png}}
+\centerline{\includegraphics[width=0.98\linewidth]{preprocessing_pipeline.png}}
 \caption{Preprocessing flow: raw AER events $\rightarrow$ spatial cropping $\rightarrow$ temporal binning $\rightarrow$ binary spike tensors.}
 \label{fig:preprocessing}
 \end{figure}
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.5\linewidth]{plots/digit_3_raster.png}}
+\centerline{\includegraphics[width=0.98\linewidth]{digit_0_sample_3_raster.png}}
 \caption{Raster plot of a processed N-MNIST digit ``3''. The temporal binning preserves the asynchronous spikes (ON/OFF polarities) into $T=20$ discrete execution steps for the hardware pipeline.}
 \label{fig:raster_plot}
 \end{figure}
@@ -175,15 +175,22 @@ with $\alpha=2.0$. Training uses Adam optimizer with learning rate $10^{-3}$, co
 % IV. HARDWARE-ORIENTED OPTIMIZATIONS
 % ============================================================
 \section{Hardware-Oriented Optimizations}
+Our primary architectural contributions center on two novel control modules designed to dynamically bypass unnecessary memory reads: an input-side \textbf{Dynamic Gatekeeper} and an output-side \textbf{Early-Exit FSM}.
 
 \subsection{Dynamic Gatekeeping}
-A gatekeeper block is inserted ahead of Conv1 to evaluate each input spike event \textit{before} any memory access is issued. The gate combines two sub-circuits:
+Because sensory event streams are inherently noisy and highly redundant in the temporal domain, fetching weights for every incoming spike wastes substantial SRAM energy. To combat this, our core contribution is the \textbf{Dynamic Gatekeeper}, instantiated ahead of the Conv1 SRAM banks. It evaluates each input spike event \textit{before} any memory access is issued. As illustrated in Fig.~\ref{fig:gatekeeper_circuit}, the gatekeeper relies on two complementary hardware sub-circuits to filter the stream:
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.5\linewidth]{circuit_dynamic_gatekeeper.png}}
+\caption{Block diagram of the Dynamic Gatekeeper. It combines an Importance Monitor (spatial frequency) and a Burst Redundancy Filter (temporal redundancy) to drop spikes before they trigger SRAM read operations.}
+\label{fig:gatekeeper_circuit}
+\end{figure}
 
 \subsubsection{Importance Monitor}
-A 4-bit saturating counter array $I[c,y,x]$ tracks cumulative activity at each spatial position. Every $W{=}255$ clock cycles, all counters are decayed via hardware-efficient right-shift (divide-by-2). An event is classified as ``important'' if $I[\text{pre\_id}] \ge \theta_{\text{imp}}$ where $\theta_{\text{imp}}=1$, filtering noise that has not recurred at the same location.
+The first sub-circuit filters spatial noise by tracking the firing frequency of each pixel. A 4-bit saturating counter array $I[c,y,x]$ maintains the cumulative activity at each spatial position. To emulate a leaky integration without complex multipliers, a global timer shifts (divides-by-2) all counters every $W{=}255$ clock cycles. An event is classified as ``important'' (granting $Keep_{imp} = 1$) only if $I[\text{pre\_id}] \ge \theta_{\text{imp}}$ where $\theta_{\text{imp}}=1$. This effectively drops isolated background noise that does not recur at the same spatial location.
 
 \subsubsection{Burst Redundancy Filter}
-A comparator tracks \texttt{last\_pre\_id} and a 3-bit \texttt{repeat\_count}. Consecutive identical spikes beyond $K_{\max}=1$ are suppressed, as they carry no new temporal information.
+The second sub-circuit targets temporal redundancy. Event cameras often produce rapid bursts of spikes for a single contrasting edge. A hardware comparator tracks \texttt{last\_pre\_id} alongside a 3-bit \texttt{repeat\_count}. Consecutive identical spikes from the same pixel beyond a threshold $K_{\max}=1$ are suppressed ($Keep_{corr}=0$), as they carry no novel temporal information for the network but would otherwise unnecessarily re-trigger the same memory fetches.
 
 \subsubsection{Gate Decision}
 Let $Gate$ represent the combinational gatekeeper decision. The boolean logic is:
@@ -214,8 +221,10 @@ All weights are quantized to 8-bit signed integers for SRAM storage using symmet
 \end{equation}
 The quantized weights are exported to hex files using two's complement representation, and loaded into the SRAM module during simulation start.
 
-\subsection{Confidence-Driven Early Exit}
-The concept of dynamically terminating SNN inference to save timesteps has been explored algorithmically, notably in Spiking Early-Exit Neural Networks (SEENN)~\cite{li2023seenn}. SEENN relies on floating-point confidence score thresholding (e.g., softmax) to determine the exit point. In contrast, our hardware-first approach maps this concept directly into synthesizable RTL. A lightweight finite state machine monitors the output layer's spike accumulation across time without requiring complex floating-point abstraction. The digital hardware simply tracks absolute integer spike counts per class:
+\subsection{Confidence-Driven Early Exit FSM}
+Complementing the input-side gatekeeper, our second major architectural contribution targets the temporal dimension. The concept of dynamically terminating SNN inference to save timesteps has been explored algorithmically, notably in Spiking Early-Exit Neural Networks (SEENN)~\cite{li2023seenn}. SEENN relies on floating-point confidence score thresholding (e.g., softmax) to determine the exit point. 
+
+However, translating such algorithms into efficient edge hardware is non-trivial. In contrast to SEENN, our hardware-first approach maps this concept directly into synthesizable RTL. A lightweight finite state machine (\textbf{Early-Exit FSM}) monitors the output layer's spike accumulation across time, functioning entirely without complex floating-point abstraction or division. The digital hardware simply tracks absolute integer spike counts per class:
 \begin{equation}
 C_k(t) = \sum_{\tau=0}^{t} S_k^{(out)}(\tau).
 \end{equation}
@@ -235,7 +244,7 @@ In our digital hardware implementation, $\theta_{conf}$ is set to 8. This shutdo
 Each optimization is expressed as a synthesizable hardware module. The complete hardware datapath is shown in Fig.~\ref{fig:rtl_architecture}.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.5\linewidth]{Hardware_Architecture/full_circuit_diagram.png}}
+\centerline{\includegraphics[width=0.98\linewidth]{full_circuit_diagram.png}}
 \caption{Digital block architecture of the proposed sparse CSNN inference pipeline. The early-exit FSM closes the control loop via global $sys\_enable$ gating.}
 \label{fig:rtl_architecture}
 \end{figure}
@@ -349,7 +358,7 @@ Latency (ns) & 200 & 114 $\pm$ 73 \\
 Figure~\ref{fig:cumulative} shows the average cumulative SRAM reads across all 500 samples as a function of time step. The baseline accumulates reads linearly through all $T=20$ steps, while the sparse design's curve flattens around $T=11$ as early exit halts processing. The shaded region represents the aggregate memory savings.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{results/fig1_cumulative_sram.png}}
+\centerline{\includegraphics[width=\linewidth]{fig1_cumulative_sram.png}}
 \caption{Cumulative SRAM reads: baseline (red) vs. sparse (cyan). Shaded band shows $\pm$1 std deviation. Green dashed line indicates the mean early exit timestep ($T$=11.4).}
 \label{fig:cumulative}
 \end{figure}
@@ -358,7 +367,7 @@ Figure~\ref{fig:cumulative} shows the average cumulative SRAM reads across all 5
 Figure~\ref{fig:exit_hist} shows the distribution of early exit timesteps. Easy digits (e.g., ``1'', ``0'') tend to exit before $T=8$, while more complex digits require additional temporal integration, with some samples running the full $T=20$ window.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=\linewidth]{results/fig2_exit_histogram.png}}
+\centerline{\includegraphics[width=\linewidth]{fig2_exit_histogram.png}}
 \caption{Histogram of early exit timesteps across 500 test samples. Mean exit = 11.4, indicating significant execution savings for a majority of inputs.}
 \label{fig:exit_hist}
 \end{figure}
@@ -367,7 +376,7 @@ Figure~\ref{fig:exit_hist} shows the distribution of early exit timesteps. Easy 
 Figure~\ref{fig:gatekeeper} illustrates the gatekeeper's input filtering effect. On average, 23.9\% of input spike events are rejected before any SRAM access occurs. The donut chart shows the kept/rejected ratio, and the bar chart quantifies the absolute spike counts.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.5\linewidth]{results/fig3_gatekeeper_bar.png}}
+\centerline{\includegraphics[width=0.98\linewidth]{fig3_gatekeeper_bar.png}}
 \caption{Dynamic gatekeeper breakdown: kept vs. rejected input spikes. Each rejected spike prevents one SRAM read and one MAC cycle.}
 \label{fig:gatekeeper}
 \end{figure}
@@ -376,7 +385,7 @@ Figure~\ref{fig:gatekeeper} illustrates the gatekeeper's input filtering effect.
 Figure~\ref{fig:energy} shows the \textit{estimated} per-inference energy breakdown using published 45nm CMOS access costs~\cite{horowitz2014energy}. SRAM access dominates both designs (96\% of estimated total energy), validating the focus on memory traffic reduction. The sparse design achieves an estimated 81.6\% energy savings, reducing estimated total energy from 368~pJ to 68~pJ. We note that these are analytical estimates based on read-event counts, not post-synthesis power measurements.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.5\linewidth]{results/fig4_energy_comparison.png}}
+\centerline{\includegraphics[width=0.98\linewidth]{fig4_energy_comparison.png}}
 \caption{Energy decomposition: SRAM access (red) vs. MAC compute (purple) for baseline and sparse designs. SRAM dominates total energy in both configurations.}
 \label{fig:energy}
 \end{figure}
@@ -385,7 +394,7 @@ Figure~\ref{fig:energy} shows the \textit{estimated} per-inference energy breakd
 Figure~\ref{fig:latency} presents the latency and throughput comparison. Assuming a 100~MHz clock (one timestep per clock cycle), the baseline requires a fixed 200~ns per inference (20 timesteps), while the sparse design averages 114~ns (1.8$\times$ speedup based on timestep reduction), with the potential for up to 2.9$\times$ speedup on easy inputs that exit at $T\approx7$. Actual latency would depend on synthesis-level clock frequency achievable on the target FPGA or ASIC.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.5\linewidth]{results/fig5_latency_speedup.png}}
+\centerline{\includegraphics[width=0.98\linewidth]{fig5_latency_speedup.png}}
 \caption{Inference latency (left) and throughput (right) comparison at 100~MHz. The speedup is input-dependent, with easy digits achieving higher improvement.}
 \label{fig:latency}
 \end{figure}
@@ -394,7 +403,7 @@ Figure~\ref{fig:latency} presents the latency and throughput comparison. Assumin
 Figure~\ref{fig:firing} compares per-layer firing rates between the baseline and sparse designs. The adaptive threshold and spike regularization reduce firing activity across all layers, with the most significant suppression in the early convolutional layers where the neuron count---and therefore the potential memory traffic---is highest.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.5\linewidth]{results/fig6_firing_rate.png}}
+\centerline{\includegraphics[width=0.98\linewidth]{fig6_firing_rate.png}}
 \caption{Per-layer average firing rate. The sparse design reduces neuronal activity across all layers, with the largest absolute reduction in Conv1 (25,088 neurons) and Conv2 (12,544 neurons).}
 \label{fig:firing}
 \end{figure}
@@ -403,7 +412,7 @@ Figure~\ref{fig:firing} compares per-layer firing rates between the baseline and
 Figure~\ref{fig:scatter} displays the relationship between early exit timestep and SRAM read savings for each of the 500 test samples, color-coded by digit class. Samples that exit early achieve the highest savings (up to 95\%), while samples requiring full $T=20$ processing still benefit from gatekeeper filtering (achieving $\sim$40\% savings from input-side rejection alone).
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.5\linewidth]{results/fig7_savings_scatter.png}}
+\centerline{\includegraphics[width=0.98\linewidth]{fig7_savings_scatter.png}}
 \caption{Per-sample SRAM savings vs. exit timestep, colored by digit class. The negative correlation confirms that early exit is the dominant savings mechanism, with gatekeeper rejection providing a baseline floor of $\sim$40\% savings even without early exit.}
 \label{fig:scatter}
 \end{figure}
