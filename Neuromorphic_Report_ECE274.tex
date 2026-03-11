@@ -334,6 +334,12 @@ All proposed hardware blocks were developed and validated through Python-based d
 In a hardware setting, the transfer of spikes between layers (e.g., from Conv1 to Conv2) presents a routing challenge. To address this iteratively, the datapath maps naturally into a tile-based Network-on-Chip (NoC), effectively bypassing any centralized memory bottleneck. 
 
 \begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{Hardware_Architecture/snn_tile_diagram.png}}
+\caption{RTL Block Diagram of a single SNN Hardware Tile. Each tile encapsulates a local SRAM weight bank, sparse MAC unit, LIF neuron array, and a spike routing interface, functioning as an independent unified execution engine on the NoC.}
+\label{fig:snn_tile_rtl}
+\end{figure}
+
+\begin{figure}[htbp]
 \centerline{\includegraphics[width=0.98\linewidth]{Hardware_Architecture/ping_pong_diagram_rtl.png}}
 \caption{RTL architecture of the Ping-Pong Spike Buffer instantiated between hardware tiles. Spikes are written to Bank A during timestep $T$, and are immediately available to the downstream layer for read access in $T+1$ while Bank B begins buffering.}
 \label{fig:ping_pong_rtl}
