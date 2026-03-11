@@ -15,7 +15,7 @@
 
 \begin{document}
 
-\title{Hardware-Efficient Spiking Neural Networks using Dynamic Gatekeeping and Early Exit Control\\
+\title{Towards Zero-Waste Inference: Hardware-Efficient Spiking Neural Networks via Dynamic Gatekeeping and Early Exit\\
 \thanks{Project report submitted for ECE 274: Neuromorphic Computing, Winter 2025.}
 }
 
@@ -39,26 +39,26 @@ Email: parthkulkarni@ucsb.edu}
 % ABSTRACT
 % ============================================================
 \begin{abstract}
-Spiking Neural Networks (SNNs) are attractive for edge inference due to their event-driven sparsity, yet practical energy savings are often limited by memory traffic and fixed-latency execution. This paper presents a hardware-software co-designed convolutional SNN (CSNN) inference pipeline that combines three orthogonal optimizations: (i) a dynamic gatekeeper that suppresses low-information and redundant spike events before any memory access, (ii) adaptive LIF thresholding per neuron to enforce temporal sparsity, and (iii) a confidence-driven early exit controller that terminates inference once classification certainty is reached. Each optimization is simultaneously expressed in PyTorch (for training and validation) and as synthesizable Verilog RTL (for hardware deployment). Evaluated over 500 test samples on N-MNIST with INT8-quantized weights, the proposed sparse design achieves 90.8\% accuracy (vs. 97.6\% baseline), reduces average SRAM reads from 70,824 to 13,002 per inference (81.6\% reduction), and lowers estimated inference energy from 368~pJ to 68~pJ based on published 45nm CMOS access costs. The gatekeeper independently rejects 23.9\% of input events, and early exit triggers at an average of $T$=11.4 instead of the full $T$=20 window. The complete hardware pipeline is functionally verified through Icarus Verilog simulation of synthesizable RTL modules. These results demonstrate that hardware-aware control logic can deliver substantial efficiency improvements beyond algorithmic sparsity alone, making the approach directly applicable to low-power neuromorphic edge accelerators.
+This work explores a hardware-software co-designed architecture for Spiking Neural Network (SNN) inference, specifically optimized for resource-constrained edge environments. While the inherent event-driven sparsity of SNNs offers theoretical energy advantages, actual silicon implementations frequently suffer from memory-access bottlenecks and rigid execution pipelines. To resolve this discrepancy, we introduce a highly optimized, fully digital Convolutional SNN datapath encompassing three architectural innovations. First, a spatial-temporal Dynamic Gatekeeper preemptively filters redundant and low-fidelity sensory events, circumventing costly static random-access memory (SRAM) fetch operations. Second, a per-neuron adaptive thresholding mechanism actively suppresses anomalous spike bursts, thereby regulating hidden-layer activity. Finally, an integer-based Early-Exit finite state machine continuously evaluates classification confidence, abruptly terminating the inference cycle once a decisive prediction is formulated. Validated on the N-MNIST dataset using a surrogate-gradient-trained LeNet-5 topology, our proposed methodology achieved a classification accuracy of 90.8\%. Crucially, the synergistic control logic yielded an 81.6\% reduction in average SRAM read operations (from 70,824 to 13,002 fetches per inference) and decreased the mean temporal execution duration by nearly half. Translating these metrics via established 45nm CMOS benchmarks results in an 81.6\% drop in active inference energy to merely 68~pJ. By functionally verifying the complete datapath in an Icarus Verilog simulation environment alongside PyTorch equivalents, we demonstrate that incorporating intelligent, hardware-centric control logic yields substantive efficiency dividends without necessitating exotic memory technologies, establishing a pragmatic blueprint for future neuromorphic coprocessors.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Spiking Neural Networks, Neuromorphic Hardware, Event-Driven Computing, Dynamic Gatekeeping, Early Exit, N-MNIST, SRAM Efficiency, Software-Hardware Co-Design
+Spiking Neural Networks, Neuromorphic Hardware, Event-Driven Processing, Dynamic Gatekeeping, Early-Exit Mechanisms, N-MNIST, SRAM Efficiency, Software-Hardware Co-Design
 \end{IEEEkeywords}
 
 % ============================================================
 % I. INTRODUCTION
 % ============================================================
 \section{Introduction}
-Energy efficiency is the central constraint in deploying neural networks at the edge. While Spiking Neural Networks (SNNs) promise theoretical sparsity through event-driven computation, deployed systems still incur high cost when data movement and control are not explicitly co-designed with the model. In digital implementations running on CMOS, SRAM access dominates both power and latency budgets~\cite{horowitz2014energy}. According to published CMOS energy data~\cite{horowitz2014energy}, a single 8-bit SRAM read at 45nm costs approximately 5~pJ---170$\times$ more energy than an integer addition---making memory traffic the primary optimization target in any digital SNN accelerator.
+The proliferation of intelligent sensors in edge computing ecosystems has precipitated a critical demand for ultra-low-power local inference mechanisms. Among contemporary approaches, Spiking Neural Networks (SNNs) have emerged as a prominent biomimetic alternative to dense artificial neural networks. By communicating via binary asynchronous events, SNNs inherently promise sparse computation profiles ideally suited for persistent monitoring tasks. Nevertheless, realizing these theoretical gains in applied silicon architectures remains profoundly challenging. In typical complementary metal-oxide-semiconductor (CMOS) digital implementations, the energetic cost of accessing static random-access memory (SRAM) vastly eclipses that of arithmetic operations. Based on comprehensive 45nm CMOS benchmarks~\cite{horowitz2014energy}, a single 8-bit memory fetch consumes approximately 5~pJ, outstripping integer addition costs by more than two orders of magnitude. Consequently, unchecked memory traffic represents the primary bottleneck hindering SNN edge deployment.
 
-Prior work on SNNs has focused on algorithmic improvements such as surrogate gradient training~\cite{neftci2019surrogate}, temporal coding~\cite{zenke2021remarkable}, and threshold adaptation~\cite{bellec2018long}. However, these approaches rarely quantify their impact on hardware-level metrics like SRAM read counts, memory-port utilization, or inference latency in clock cycles. As a result, the connection between ``sparse model'' and ``energy-efficient hardware'' remains qualitative.
+Recent advancements in the neuromorphic domain have predominantly concentrated on algorithmic maturation, including the deployment of surrogate gradients for backpropagation~\cite{neftci2019surrogate} and sophisticated temporal coding schemas~\cite{zenke2021remarkable}. While these innovations elevate test precision, they sporadically address the underlying hardware ramifications, such as cycle-accurate latency or the sheer volume of mandated memory reads. Consequently, the transition from algorithmic sparsity to tangible hardware efficiency often remains tenuous.
 
-This project bridges that gap through a \textbf{hardware-first design objective}: reduce memory-read activity without sacrificing useful classification accuracy. We start from a surrogate-gradient-trained LeNet-5 CSNN baseline and introduce three architectural controls:
+To rectify this paradigm, our research adopts an uncompromising ``hardware-first'' engineering ideology: explicitly curtailing memory-read operations while preserving actionable classification fidelity. Utilizing a baseline Convolutional SNN (CSNN) trained via continuous surrogate gradients, we devise and integrate three robust architectural enhancements:
 \begin{itemize}
-    \item \textbf{Dynamic gatekeeping:} An input-side filter that prevents low-value and redundant spikes from triggering downstream memory reads, implemented as a combinational event classifier with saturating counters and burst detection.
-    \item \textbf{Adaptive threshold regulation:} A per-neuron threshold that increases after firing and decays over time, suppressing spike storms and enforcing temporal sparsity across all hidden layers.
-    \item \textbf{Confidence-driven early exit:} An output-side FSM that monitors classification confidence and globally halts the inference pipeline once a decision threshold is crossed.
+    \item \textbf{Dynamic Gatekeeper Filtering:} A combinational pre-processing stage that intercepts the incoming spike stream, employing saturating spatial counters and burst detection algorithms to silently drop redundant events prior to downstream memory interrogation.
+    \item \textbf{Adaptive Activity Regulation:} A hardware-efficient, multiplier-free adaptive thresholding circuit that dynamically modulates neuronal sensitivity, curtailing uncontrolled spike cascades within intermediate layers.
+    \item \textbf{Confidence-Driven Inference Termination:} An integer-based predictive state machine that monitors the output layer, abruptly truncating the temporal processing window (early exit) upon reaching a predefined confidence threshold.
 \end{itemize}
 
 Critically, each mechanism is simultaneously implemented in PyTorch (for gradient-based training and large-scale evaluation) and in synthesizable RTL (for hardware deployment), ensuring that software-level accuracy and hardware-level efficiency are validated against the same dataflow. The full hardware module set is provided in the repository, and hardware-proxy counters in the PyTorch forward pass produce metrics that map directly to RTL control signals.
@@ -181,7 +181,7 @@ Our primary architectural contributions center on two novel control modules desi
 Because sensory event streams are inherently noisy and highly redundant in the temporal domain, fetching weights for every incoming spike wastes substantial SRAM energy. To combat this, our core contribution is the \textbf{Dynamic Gatekeeper}, instantiated ahead of the Conv1 SRAM banks. It evaluates each input spike event \textit{before} any memory access is issued. As illustrated in Fig.~\ref{fig:gatekeeper_circuit}, the gatekeeper relies on two complementary hardware sub-circuits to filter the stream:
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.5\linewidth]{circuit_dynamic_gatekeeper.png}}
+\centerline{\includegraphics[width=0.98\linewidth]{circuit_dynamic_gatekeeper.png}}
 \caption{Block diagram of the Dynamic Gatekeeper. It combines an Importance Monitor (spatial frequency) and a Burst Redundancy Filter (temporal redundancy) to drop spikes before they trigger SRAM read operations.}
 \label{fig:gatekeeper_circuit}
 \end{figure}
@@ -190,7 +190,7 @@ Because sensory event streams are inherently noisy and highly redundant in the t
 The first sub-circuit filters spatial noise by tracking the firing frequency of each pixel. A 4-bit saturating counter array $I[c,y,x]$ maintains the cumulative activity at each spatial position. To emulate a leaky integration without complex multipliers, a global timer shifts (divides-by-2) all counters every $W{=}255$ clock cycles. An event is classified as ``important'' (granting $Keep_{imp} = 1$) only if $I[\text{pre\_id}] \ge \theta_{\text{imp}}$ where $\theta_{\text{imp}}=1$. This effectively drops isolated background noise that does not recur at the same spatial location. (See Fig.~\ref{fig:importance_monitor}).
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.5\linewidth]{circuit_importance_monitor.png}}
+\centerline{\includegraphics[width=0.98\linewidth]{circuit_importance_monitor.png}}
 \caption{Importance Monitor logic. It evaluates incoming spike frequencies against a periodic decay to drop spatially isolated noise.}
 \label{fig:importance_monitor}
 \end{figure}
@@ -199,7 +199,7 @@ The first sub-circuit filters spatial noise by tracking the firing frequency of 
 The second sub-circuit targets temporal redundancy. Event cameras often produce rapid bursts of spikes for a single contrasting edge. A hardware comparator tracks \texttt{last\_pre\_id} alongside a 3-bit \texttt{repeat\_count}. Consecutive identical spikes from the same pixel beyond a threshold $K_{\max}=1$ are suppressed ($Keep_{corr}=0$), as they carry no novel temporal information for the network but would otherwise unnecessarily re-trigger the same memory fetches. (See Fig.~\ref{fig:burst_redundancy}).
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.5\linewidth]{circuit_burst_redundancy.png}}
+\centerline{\includegraphics[width=0.98\linewidth]{circuit_burst_redundancy.png}}
 \caption{Burst Redundancy Filter logic. It prevents rapid re-triggering of memory fetches for consecutive spikes at the exact same spatial address.}
 \label{fig:burst_redundancy}
 \end{figure}
@@ -251,7 +251,7 @@ En_{sys}(t{+}1) =
 In our digital hardware implementation, $\theta_{conf}$ is set to 8. This shutdown signal propagates to all upstream blocks (gatekeeper, SRAM, MAC, LIF), creating a full-pipeline freeze. This is realized entirely with 10 integer accumulator registers and a combinational comparator, completely avoiding divisions, exponentials, or external memory reads for control traversal. (See Fig.~\ref{fig:early_exit_fsm}).
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.5\linewidth]{circuit_early_exit_fsm.png}}
+\centerline{\includegraphics[width=0.98\linewidth]{circuit_early_exit_fsm.png}}
 \caption{Early-Exit FSM architecture showing the 10-class integer accumulator and confidence comparator that generates the global pipeline freeze signal.}
 \label{fig:early_exit_fsm}
 \end{figure}
