@@ -48,27 +48,8 @@ random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
 
-# Plot style
-matplotlib.rcParams.update({
-    'font.family': 'serif',
-    'font.size': 11,
-    'axes.titlesize': 13,
-    'axes.labelsize': 12,
-    'xtick.labelsize': 10,
-    'ytick.labelsize': 10,
-    'legend.fontsize': 9,
-    'figure.dpi': DPI,
-    'savefig.dpi': DPI,
-    'savefig.bbox': 'tight',
-})
+DPI = 300
 
-# Colors
-C_BASE = '#E74C3C'   # red
-C_SPARSE = '#00B4D8' # cyan
-C_GK = '#FF6B9D'     # pink
-C_ENERGY = '#7B61FF' # purple
-C_EXIT = '#00E676'   # green
-C_GOLD = '#FFD740'
 
 def main():
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -148,6 +129,9 @@ def main():
         with torch.no_grad():
             b_out = baseline(x_seq)
 
+        # Baseline returns (spike_rate, out_spikes) tuple
+        b_spike_rate = b_out[0] if isinstance(b_out, tuple) else b_out
+
         # Baseline spike counting
         dims = list(range(x_seq.dim())); dims.remove(1)
         inp_spk_t = x_seq.sum(dim=dims).detach().cpu().numpy()
@@ -160,7 +144,7 @@ def main():
         b_cumul = np.cumsum(total_spk_t).tolist()
         b_reads = int(b_cumul[-1])
 
-        b_pred = b_out.argmax(1).item() if b_out.dim() > 1 else b_out.argmax().item()
+        b_pred = b_spike_rate.argmax(1).item()
         if b_pred == label: baseline_correct += 1
 
         # ---- Sparse inference ----
@@ -279,33 +263,78 @@ def main():
     print(f"  📄 results/latex_table.tex")
 
     # ============================================================
+    # PLOT STYLE — Premium Dark Theme
+    # ============================================================
+    BG       = '#0D1117'
+    PANEL    = '#161B22'
+    GRID_C   = '#21262D'
+    TEXT     = '#E6EDF3'
+    TEXT_DIM = '#8B949E'
+    RED      = '#FF6B6B'
+    CYAN     = '#00D4FF'
+    GREEN    = '#00E676'
+    PURPLE   = '#B388FF'
+    ORANGE   = '#FFB74D'
+    PINK     = '#FF6B9D'
+    GOLD     = '#FFD740'
+    TEAL     = '#64FFDA'
+
+    def style_ax(ax, title='', xlabel='', ylabel=''):
+        ax.set_facecolor(PANEL)
+        ax.set_title(title, color=TEXT, fontsize=13, fontweight='bold', pad=12)
+        ax.set_xlabel(xlabel, color=TEXT_DIM, fontsize=10)
+        ax.set_ylabel(ylabel, color=TEXT_DIM, fontsize=10)
+        ax.tick_params(colors=TEXT_DIM, labelsize=9)
+        ax.grid(True, color=GRID_C, alpha=0.6, linewidth=0.5)
+        for spine in ax.spines.values():
+            spine.set_color(GRID_C)
+
+    def dark_fig(w=8, h=5):
+        fig = plt.figure(figsize=(w, h), facecolor=BG)
+        return fig
+
+    # ============================================================
     # FIGURE 1: Cumulative SRAM Reads Over Time
     # ============================================================
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig = dark_fig(9, 5.5)
+    ax = fig.add_subplot(111)
+    style_ax(ax, f'Cumulative SRAM Reads — Baseline vs Sparse (N={N})',
+             'Timestep (T)', 'Cumulative SRAM Reads')
+
     t_axis = np.arange(1, T_MAX + 1)
     b_mean = np.mean(baseline_cumul_all, axis=0)
     b_std = np.std(baseline_cumul_all, axis=0)
     s_mean = np.mean(sparse_cumul_all, axis=0)
     s_std = np.std(sparse_cumul_all, axis=0)
 
-    ax.fill_between(t_axis, b_mean - b_std, b_mean + b_std, alpha=0.15, color=C_BASE)
-    ax.fill_between(t_axis, s_mean - s_std, s_mean + s_std, alpha=0.15, color=C_SPARSE)
-    ax.plot(t_axis, b_mean, color=C_BASE, linewidth=2.5, marker='x', markersize=5, label='Baseline (Dense)')
-    ax.plot(t_axis, s_mean, color=C_SPARSE, linewidth=2.5, marker='o', markersize=5, label='Sparse (Optimized)')
-
-    # Shade savings area
-    ax.fill_between(t_axis, s_mean, b_mean, alpha=0.08, color=C_GK, label='Reads Saved')
+    # Savings fill
+    ax.fill_between(t_axis, s_mean, b_mean, alpha=0.06, color=PINK)
+    # Std bands
+    ax.fill_between(t_axis, b_mean - b_std, b_mean + b_std, alpha=0.12, color=RED)
+    ax.fill_between(t_axis, s_mean - s_std, s_mean + s_std, alpha=0.12, color=CYAN)
+    # Main lines
+    ax.plot(t_axis, b_mean, color=RED, linewidth=2.5, marker='s', markersize=5,
+            markerfacecolor=RED, markeredgecolor='white', markeredgewidth=0.5,
+            label=f'Baseline — {b_mean[-1]:,.0f} reads', zorder=5)
+    ax.plot(t_axis, s_mean, color=CYAN, linewidth=2.5, marker='o', markersize=5,
+            markerfacecolor=CYAN, markeredgecolor='white', markeredgewidth=0.5,
+            label=f'Sparse — {s_mean[-1]:,.0f} reads', zorder=5)
 
     mean_exit = agg('exit_t')[0]
-    ax.axvline(x=mean_exit, color=C_EXIT, linestyle='--', linewidth=1.5, label=f'Avg Early Exit (T={mean_exit:.1f})')
+    ax.axvline(x=mean_exit, color=GREEN, linestyle='--', linewidth=1.5, alpha=0.8,
+               label=f'Avg Early Exit (T={mean_exit:.1f})')
 
-    ax.set_xlabel('Timestep (T)')
-    ax.set_ylabel('Cumulative SRAM Reads')
-    ax.set_title(f'Cumulative SRAM Reads: Baseline vs. Sparse (N={N})')
-    ax.legend(loc='upper left')
-    ax.grid(True, alpha=0.3)
+    # Annotate savings
+    mid_t = int(T_MAX * 0.75)
+    gap = b_mean[mid_t-1] - s_mean[mid_t-1]
+    ax.annotate(f'{agg("saving_pct")[0]:.0f}% fewer\nSRAM reads',
+                xy=(mid_t, (b_mean[mid_t-1] + s_mean[mid_t-1])/2),
+                fontsize=10, color=PINK, fontweight='bold', ha='center',
+                bbox=dict(boxstyle='round,pad=0.4', fc=BG, ec=PINK, alpha=0.9))
+
+    ax.legend(loc='upper left', facecolor=PANEL, edgecolor=GRID_C, labelcolor=TEXT, fontsize=9)
     ax.set_xticks(t_axis)
-    fig.savefig('results/fig1_cumulative_sram.png')
+    fig.savefig('results/fig1_cumulative_sram.png', facecolor=BG)
     plt.close()
     print("  📊 fig1_cumulative_sram.png")
 
@@ -313,145 +342,232 @@ def main():
     # FIGURE 2: Early Exit Histogram
     # ============================================================
     exits = [r['exit_t'] for r in results]
-    fig, ax = plt.subplots(figsize=(7, 4.5))
+    fig = dark_fig(8, 5)
+    ax = fig.add_subplot(111)
+    style_ax(ax, f'Early Exit Timestep Distribution (N={N})',
+             'Exit Timestep', 'Number of Samples')
+
     bins = np.arange(0.5, T_MAX + 1.5, 1)
-    ax.hist(exits, bins=bins, color=C_EXIT, edgecolor='#0a3520', alpha=0.85, rwidth=0.85)
-    ax.axvline(x=np.mean(exits), color=C_BASE, linestyle='--', linewidth=2, label=f'Mean = {np.mean(exits):.1f}')
-    ax.set_xlabel('Exit Timestep')
-    ax.set_ylabel('Number of Samples')
-    ax.set_title(f'Early Exit Timestep Distribution (N={N})')
+    counts, _, bars = ax.hist(exits, bins=bins, color=GREEN, edgecolor=PANEL,
+                               alpha=0.85, rwidth=0.82)
+    # Gradient effect: color bars by height
+    max_c = max(counts) if max(counts) > 0 else 1
+    for bar, c in zip(bars, counts):
+        frac = c / max_c
+        r = int(0 + frac * 0)
+        g = int(230 - frac * 50)
+        b_col = int(118 - frac * 40)
+        bar.set_facecolor(f'#{r:02x}{g:02x}{b_col:02x}')
+        bar.set_alpha(0.7 + 0.3 * frac)
+
+    ax.axvline(x=np.mean(exits), color=RED, linestyle='--', linewidth=2,
+               label=f'Mean = {np.mean(exits):.1f}', zorder=10)
+    ax.axvline(x=np.median(exits), color=GOLD, linestyle=':', linewidth=1.5,
+               label=f'Median = {np.median(exits):.0f}', zorder=10)
+
+    ax.legend(facecolor=PANEL, edgecolor=GRID_C, labelcolor=TEXT)
     ax.set_xticks(range(1, T_MAX + 1))
-    ax.legend()
-    ax.grid(axis='y', alpha=0.3)
-    fig.savefig('results/fig2_exit_histogram.png')
+    fig.savefig('results/fig2_exit_histogram.png', facecolor=BG)
     plt.close()
     print("  📊 fig2_exit_histogram.png")
 
     # ============================================================
-    # FIGURE 3: Gatekeeper Breakdown
+    # FIGURE 3: Gatekeeper Breakdown (Donut + Bar)
     # ============================================================
-    gk_kept = np.mean([r['gk_kept'] for r in results])
-    gk_rejected = np.mean([r['gk_total'] - r['gk_kept'] for r in results])
-    fig, ax = plt.subplots(figsize=(6, 4.5))
-    bars = ax.bar(['Kept\n(Useful)', 'Rejected\n(Noise/Burst)'], [gk_kept, gk_rejected],
-                  color=[C_SPARSE, C_GK], edgecolor='white', width=0.5)
-    for b in bars:
-        ax.text(b.get_x() + b.get_width()/2, b.get_height() + max(gk_kept, gk_rejected)*0.02,
-                f'{b.get_height():,.0f}', ha='center', fontweight='bold')
-    ax.set_ylabel('Average Input Spikes per Inference')
-    ax.set_title('Dynamic Gatekeeper: Input Spike Filtering')
-    ax.grid(axis='y', alpha=0.3)
-    fig.savefig('results/fig3_gatekeeper_bar.png')
+    gk_kept_v = np.mean([r['gk_kept'] for r in results])
+    gk_rej_v = np.mean([r['gk_total'] - r['gk_kept'] for r in results])
+    gk_total = gk_kept_v + gk_rej_v
+
+    fig = dark_fig(10, 4.5)
+    ax1 = fig.add_subplot(121)
+    ax2 = fig.add_subplot(122)
+
+    # Donut chart
+    ax1.set_facecolor(PANEL)
+    sizes = [gk_kept_v, gk_rej_v]
+    colors_d = [CYAN, PINK]
+    wedges, texts, autotexts = ax1.pie(sizes, labels=['Kept', 'Rejected'],
+        colors=colors_d, autopct='%1.1f%%', startangle=90,
+        pctdistance=0.78, wedgeprops=dict(width=0.4, edgecolor=PANEL, linewidth=2))
+    for t in texts + autotexts:
+        t.set_color(TEXT)
+        t.set_fontsize(10)
+    for at in autotexts:
+        at.set_fontweight('bold')
+    centre_circle = plt.Circle((0, 0), 0.45, fc=PANEL)
+    ax1.add_artist(centre_circle)
+    ax1.text(0, 0, f'{gk_total:,.0f}\nTotal', ha='center', va='center',
+             color=TEXT, fontsize=11, fontweight='bold')
+    ax1.set_title('Gatekeeper Filter Ratio', color=TEXT, fontsize=12, fontweight='bold')
+
+    # Bar chart
+    style_ax(ax2, 'Avg Spikes per Inference', '', 'Spike Count')
+    bar_vals = [gk_kept_v, gk_rej_v]
+    bar_labels = ['Kept\n(→ SRAM)', 'Rejected\n(Blocked)']
+    bar_colors = [CYAN, PINK]
+    bs = ax2.bar(bar_labels, bar_vals, color=bar_colors, width=0.5,
+                 edgecolor=[TEAL, RED], linewidth=1.5, alpha=0.85)
+    for b_bar in bs:
+        h = b_bar.get_height()
+        ax2.text(b_bar.get_x() + b_bar.get_width()/2, h + gk_total * 0.02,
+                 f'{h:,.0f}', ha='center', va='bottom', color=TEXT, fontweight='bold', fontsize=11)
+
+    fig.savefig('results/fig3_gatekeeper_bar.png', facecolor=BG)
     plt.close()
     print("  📊 fig3_gatekeeper_bar.png")
 
     # ============================================================
-    # FIGURE 4: Energy Comparison
+    # FIGURE 4: Energy Comparison (Stacked Bar)
     # ============================================================
-    e_b_sram = agg('e_base')[0] * E_SRAM_PJ / (E_SRAM_PJ + E_MAC_PJ)
-    e_b_mac = agg('e_base')[0] * E_MAC_PJ / (E_SRAM_PJ + E_MAC_PJ)
-    e_s_sram = agg('e_sparse')[0] * E_SRAM_PJ / (E_SRAM_PJ + E_MAC_PJ)
-    e_s_mac = agg('e_sparse')[0] * E_MAC_PJ / (E_SRAM_PJ + E_MAC_PJ)
+    e_b_total = agg('e_base')[0]
+    e_s_total = agg('e_sparse')[0]
+    e_b_sram = e_b_total * E_SRAM_PJ / (E_SRAM_PJ + E_MAC_PJ)
+    e_b_mac = e_b_total * E_MAC_PJ / (E_SRAM_PJ + E_MAC_PJ)
+    e_s_sram = e_s_total * E_SRAM_PJ / (E_SRAM_PJ + E_MAC_PJ)
+    e_s_mac = e_s_total * E_MAC_PJ / (E_SRAM_PJ + E_MAC_PJ)
 
-    fig, ax = plt.subplots(figsize=(6, 5))
-    x = np.arange(2)
-    w = 0.35
-    b1 = ax.bar(x - w/2, [e_b_sram, e_s_sram], w, label='SRAM Energy', color=C_BASE, alpha=0.85)
-    b2 = ax.bar(x + w/2, [e_b_mac, e_s_mac], w, label='MAC Energy', color=C_ENERGY, alpha=0.85)
-    ax.set_xticks(x)
-    ax.set_xticklabels(['Baseline', 'Sparse'])
-    ax.set_ylabel('Energy (pJ)')
-    ax.set_title('Energy Breakdown: SRAM vs. MAC')
-    ax.legend()
-    ax.grid(axis='y', alpha=0.3)
+    fig = dark_fig(7, 5)
+    ax = fig.add_subplot(111)
+    style_ax(ax, 'Energy per Inference (45nm CMOS)', '', 'Energy (pJ)')
 
-    # Total energy labels
-    for i, (total, label) in enumerate([(agg('e_base')[0], 'Baseline'), (agg('e_sparse')[0], 'Sparse')]):
-        ax.text(i, max(e_b_sram, e_s_sram) * 1.05, f'Total: {total:,.0f} pJ', ha='center', fontweight='bold', fontsize=9)
+    x_pos = np.array([0, 1])
+    ax.bar(x_pos, [e_b_sram, e_s_sram], 0.45, label='SRAM Access', color=RED, alpha=0.85, edgecolor=PANEL)
+    ax.bar(x_pos, [e_b_mac, e_s_mac], 0.45, bottom=[e_b_sram, e_s_sram],
+           label='MAC Compute', color=PURPLE, alpha=0.85, edgecolor=PANEL)
 
-    fig.savefig('results/fig4_energy_comparison.png')
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(['Baseline', 'Sparse'], color=TEXT)
+
+    # Total labels with savings
+    for i, total in enumerate([e_b_total, e_s_total]):
+        ax.text(i, total + e_b_total * 0.03, f'{total:,.0f} pJ',
+                ha='center', color=TEXT, fontweight='bold', fontsize=11)
+
+    pct_saved = (1 - e_s_total / e_b_total) * 100
+    ax.annotate(f'↓ {pct_saved:.0f}% energy saved',
+                xy=(0.5, (e_b_total + e_s_total)/2),
+                fontsize=12, color=GREEN, fontweight='bold', ha='center',
+                bbox=dict(boxstyle='round,pad=0.4', fc=BG, ec=GREEN, alpha=0.85))
+
+    ax.legend(facecolor=PANEL, edgecolor=GRID_C, labelcolor=TEXT)
+    fig.savefig('results/fig4_energy_comparison.png', facecolor=BG)
     plt.close()
     print("  📊 fig4_energy_comparison.png")
 
     # ============================================================
     # FIGURE 5: Latency & Throughput
     # ============================================================
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.5))
+    fig = dark_fig(11, 5)
+    ax1 = fig.add_subplot(121)
+    ax2 = fig.add_subplot(122)
+
+    lat_b, lat_s = agg('lat_base')[0], agg('lat_sparse')[0]
+    lat_s_std = agg('lat_sparse')[1]
 
     # Latency
-    lat_b, lat_s = agg('lat_base')[0], agg('lat_sparse')[0]
-    bars = ax1.bar(['Baseline', 'Sparse'], [lat_b, lat_s], color=[C_BASE, C_SPARSE], width=0.5)
-    for b in bars:
-        ax1.text(b.get_x() + b.get_width()/2, b.get_height() + lat_b * 0.02,
-                 f'{b.get_height():.0f} ns', ha='center', fontweight='bold')
-    ax1.set_ylabel('Latency per Inference (ns)')
-    ax1.set_title('Inference Latency')
-    ax1.grid(axis='y', alpha=0.3)
+    style_ax(ax1, 'Inference Latency', '', 'Latency (ns)')
+    bs1 = ax1.bar(['Baseline', 'Sparse'], [lat_b, lat_s], color=[RED, CYAN],
+                  width=0.45, edgecolor=PANEL, linewidth=1.5, alpha=0.85,
+                  yerr=[0, lat_s_std], capsize=5, error_kw={'ecolor': TEXT_DIM, 'capthick': 1.5})
+    for b_bar in bs1:
+        h = b_bar.get_height()
+        ax1.text(b_bar.get_x() + b_bar.get_width()/2, h + lat_b * 0.04,
+                 f'{h:.0f} ns', ha='center', color=TEXT, fontweight='bold', fontsize=11)
+
+    speedup = lat_b / lat_s
+    ax1.annotate(f'{speedup:.1f}× faster', xy=(0.5, lat_b * 0.5), fontsize=12,
+                 color=GREEN, fontweight='bold', ha='center',
+                 bbox=dict(boxstyle='round,pad=0.4', fc=BG, ec=GREEN, alpha=0.85))
 
     # Throughput
-    tp_b = 1e9 / lat_b / 1e6  # M inferences/sec
+    style_ax(ax2, 'Inference Throughput @ 100MHz', '', 'M inferences/sec')
+    tp_b = 1e9 / lat_b / 1e6
     tp_s = 1e9 / lat_s / 1e6
-    bars2 = ax2.bar(['Baseline', 'Sparse'], [tp_b, tp_s], color=[C_BASE, C_SPARSE], width=0.5)
-    for b in bars2:
-        ax2.text(b.get_x() + b.get_width()/2, b.get_height() + tp_b * 0.02,
-                 f'{b.get_height():.1f} M/s', ha='center', fontweight='bold')
-    ax2.set_ylabel('Throughput (M inferences/sec)')
-    ax2.set_title('Inference Throughput')
-    ax2.grid(axis='y', alpha=0.3)
+    bs2 = ax2.bar(['Baseline', 'Sparse'], [tp_b, tp_s], color=[RED, CYAN],
+                  width=0.45, edgecolor=PANEL, linewidth=1.5, alpha=0.85)
+    for b_bar in bs2:
+        h = b_bar.get_height()
+        ax2.text(b_bar.get_x() + b_bar.get_width()/2, h + tp_s * 0.04,
+                 f'{h:.1f} M/s', ha='center', color=TEXT, fontweight='bold', fontsize=11)
 
-    fig.suptitle(f'Latency & Throughput Comparison @ 100 MHz', fontsize=13)
     plt.tight_layout()
-    fig.savefig('results/fig5_latency_speedup.png')
+    fig.savefig('results/fig5_latency_speedup.png', facecolor=BG)
     plt.close()
     print("  📊 fig5_latency_speedup.png")
 
     # ============================================================
-    # FIGURE 6: Per-Layer Firing Rates
+    # FIGURE 6: Per-Layer Firing Rates (Grouped Bars)
     # ============================================================
     layers = ['lif1', 'lif2', 'lif3', 'lif4']
-    layer_labels = ['Conv1-LIF\n(32×28×28)', 'Conv2-LIF\n(64×14×14)', 'FC1-LIF\n(128)', 'FC2-LIF\n(10)']
+    layer_labels = ['Conv1\n32×28×28', 'Conv2\n64×14×14', 'FC1\n128', 'FC2\n10']
     layer_neurons = [32*28*28, 64*14*14, 128, 10]
 
     b_rates = [np.mean(per_layer_spikes_base.get(l, [0])) / (n * T_MAX) * 100
                for l, n in zip(layers, layer_neurons)]
-    # For sparse, use baseline layer names if sparse per-layer not available
     s_rates_raw = per_layer_spikes_sparse if per_layer_spikes_sparse else per_layer_spikes_base
-    s_rates = []
     mean_exit_t = agg('exit_t')[0]
+    s_rates = []
     for l, n in zip(layers, layer_neurons):
         vals = s_rates_raw.get(l, per_layer_spikes_base.get(l, [0]))
         s_rates.append(np.mean(vals) / (n * mean_exit_t) * 100)
 
-    fig, ax = plt.subplots(figsize=(8, 4.5))
+    fig = dark_fig(9, 5)
+    ax = fig.add_subplot(111)
+    style_ax(ax, 'Per-Layer Average Firing Rate', '', 'Firing Rate (%)')
+
     x = np.arange(len(layers))
-    w = 0.35
-    ax.bar(x - w/2, b_rates, w, label='Baseline', color=C_BASE, alpha=0.85)
-    ax.bar(x + w/2, s_rates, w, label='Sparse', color=C_SPARSE, alpha=0.85)
+    w = 0.32
+    ax.bar(x - w/2, b_rates, w, label='Baseline', color=RED, alpha=0.85, edgecolor=PANEL)
+    ax.bar(x + w/2, s_rates, w, label='Sparse', color=CYAN, alpha=0.85, edgecolor=PANEL)
+
+    # Value labels
+    for i in range(len(layers)):
+        ax.text(x[i] - w/2, b_rates[i] + max(b_rates)*0.03, f'{b_rates[i]:.2f}%',
+                ha='center', color=RED, fontsize=8, fontweight='bold')
+        ax.text(x[i] + w/2, s_rates[i] + max(b_rates)*0.03, f'{s_rates[i]:.2f}%',
+                ha='center', color=CYAN, fontsize=8, fontweight='bold')
+
     ax.set_xticks(x)
-    ax.set_xticklabels(layer_labels)
-    ax.set_ylabel('Firing Rate (%)')
-    ax.set_title('Per-Layer Average Firing Rate')
-    ax.legend()
-    ax.grid(axis='y', alpha=0.3)
-    fig.savefig('results/fig6_firing_rate.png')
+    ax.set_xticklabels(layer_labels, color=TEXT_DIM)
+    ax.legend(facecolor=PANEL, edgecolor=GRID_C, labelcolor=TEXT)
+    fig.savefig('results/fig6_firing_rate.png', facecolor=BG)
     plt.close()
     print("  📊 fig6_firing_rate.png")
 
     # ============================================================
-    # FIGURE 7: Per-Sample Savings Scatter
+    # FIGURE 7: Per-Sample Savings Scatter (Glowing dots)
     # ============================================================
-    fig, ax = plt.subplots(figsize=(7, 5))
+    fig = dark_fig(8, 5.5)
+    ax = fig.add_subplot(111)
+    style_ax(ax, f'Per-Sample Savings vs Exit Time (N={N})',
+             'Early Exit Timestep', 'SRAM Reads Saved (%)')
+
     exits_arr = [r['exit_t'] for r in results]
     savings_arr = [r['saving_pct'] for r in results]
-    scatter = ax.scatter(exits_arr, savings_arr, c=[r['label'] for r in results],
-                         cmap='tab10', alpha=0.6, s=20, edgecolors='none')
-    ax.set_xlabel('Early Exit Timestep')
-    ax.set_ylabel('SRAM Reads Saved (%)')
-    ax.set_title(f'Per-Sample Savings vs. Exit Time (N={N})')
-    ax.grid(True, alpha=0.3)
-    cbar = plt.colorbar(scatter, ax=ax, label='Digit Class')
+    labels_arr = [r['label'] for r in results]
+
+    # Glow layer (larger, faint)
+    ax.scatter(exits_arr, savings_arr, c=labels_arr, cmap='Spectral',
+               alpha=0.12, s=80, edgecolors='none')
+    # Main dots
+    sc = ax.scatter(exits_arr, savings_arr, c=labels_arr, cmap='Spectral',
+                    alpha=0.7, s=22, edgecolors='none', zorder=5)
+
+    cbar = plt.colorbar(sc, ax=ax, label='Digit Class', pad=0.02)
     cbar.set_ticks(range(10))
-    fig.savefig('results/fig7_savings_scatter.png')
+    cbar.ax.yaxis.set_tick_params(color=TEXT_DIM)
+    cbar.outline.set_edgecolor(GRID_C)
+    cbar.ax.yaxis.label.set_color(TEXT_DIM)
+    plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color=TEXT_DIM)
+
+    # Trend line
+    z = np.polyfit(exits_arr, savings_arr, 1)
+    p = np.poly1d(z)
+    x_line = np.linspace(min(exits_arr), max(exits_arr), 100)
+    ax.plot(x_line, p(x_line), color=GOLD, linewidth=1.5, linestyle='--', alpha=0.6, label='Trend')
+    ax.legend(facecolor=PANEL, edgecolor=GRID_C, labelcolor=TEXT, fontsize=9)
+
+    fig.savefig('results/fig7_savings_scatter.png', facecolor=BG)
     plt.close()
     print("  📊 fig7_savings_scatter.png")
 
@@ -459,20 +575,27 @@ def main():
     # FIGURE 8: Confidence Trajectory
     # ============================================================
     if confidence_trajectories:
-        fig, ax = plt.subplots(figsize=(8, 5))
-        colors = plt.cm.tab10(np.linspace(0, 1, 10))
+        fig = dark_fig(9, 5.5)
+        ax = fig.add_subplot(111)
+        style_ax(ax, 'Confidence Trajectory by Digit Class',
+                 'Timestep', 'Max Softmax Confidence')
+
+        digit_colors = [RED, ORANGE, GOLD, GREEN, TEAL, CYAN, PURPLE, PINK, '#FF8A65', TEXT_DIM]
         for digit, traj in sorted(confidence_trajectories.items()):
             t_ax = range(1, len(traj) + 1)
-            ax.plot(t_ax, traj, linewidth=2, color=colors[digit], label=f'Digit {digit}', marker='o', markersize=4)
-        ax.axhline(y=0.9, color=C_GK, linestyle='--', linewidth=1.5, label='Exit Threshold (90%)')
-        ax.set_xlabel('Timestep')
-        ax.set_ylabel('Max Softmax Confidence')
-        ax.set_title('Confidence Trajectory by Digit Class')
-        ax.legend(ncol=3, fontsize=8)
-        ax.grid(True, alpha=0.3)
+            c = digit_colors[digit % len(digit_colors)]
+            ax.plot(t_ax, traj, linewidth=2, color=c, marker='o', markersize=4,
+                    markerfacecolor=c, markeredgecolor='white', markeredgewidth=0.3,
+                    label=f'Digit {digit}', alpha=0.85, zorder=5)
+
+        ax.axhline(y=0.9, color=PINK, linestyle='--', linewidth=2, alpha=0.7,
+                   label='Exit Threshold (90%)')
+        ax.fill_between(range(1, T_MAX+1), 0.9, 1.0, alpha=0.04, color=GREEN)
+
         ax.set_ylim(0, 1.05)
         ax.set_xticks(range(1, T_MAX + 1))
-        fig.savefig('results/fig8_confidence_trajectory.png')
+        ax.legend(ncol=4, facecolor=PANEL, edgecolor=GRID_C, labelcolor=TEXT, fontsize=7.5, loc='lower right')
+        fig.savefig('results/fig8_confidence_trajectory.png', facecolor=BG)
         plt.close()
         print("  📊 fig8_confidence_trajectory.png")
 
