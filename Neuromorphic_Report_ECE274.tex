@@ -346,8 +346,25 @@ All results are computed over $N=500$ randomly selected test samples with a fixe
 \subsection{Overall Performance Comparison}
 Table~\ref{tab:hw_metrics} summarizes the key metrics across 500 test inferences. The sparse design achieves an 81.6\% reduction in SRAM reads with a 6.8 percentage point accuracy trade-off.
 
-% Auto-generated table from generate_publication_results.py
-\input{results/latex_table.tex}
+\begin{table}[t]
+\caption{Baseline vs.\ Sparse SNN — Hardware Metrics (N-MNIST, $N$=500)}
+\centering\small
+\begin{tabular}{lcc}
+\hline
+\textbf{Metric} & \textbf{Baseline} & \textbf{Sparse} \\
+\hline
+Accuracy (\%) & 97.6 & 90.8 \\
+SRAM Reads & 70,824 $\pm$ 12,009 & 13,002 $\pm$ 5,203 \\
+Reads Saved (\%) & — & 81.6 $\pm$ 6.5 \\
+GK Rejection (\%) & 0 & 23.9 $\pm$ 6.7 \\
+Exit Timestep & 20 & 11.4 $\pm$ 7.3 \\
+Firing Rate (\%) & 8.922 & 3.559 \\
+Energy (pJ) & 368,286 $\pm$ 62,445 & 67,613 $\pm$ 27,055 \\
+Latency (ns) & 200 & 114 $\pm$ 73 \\
+\hline
+\end{tabular}
+\label{tab:hw_metrics}
+\end{table}
 
 \subsection{Cumulative SRAM Reads Over Time}
 Figure~\ref{fig:cumulative} shows the average cumulative SRAM reads across all 500 samples as a function of time step. The baseline accumulates reads linearly through all $T=20$ steps, while the sparse design's curve flattens around $T=11$ as early exit halts processing. The shaded region represents the aggregate memory savings.
