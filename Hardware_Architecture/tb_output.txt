@@ -1,0 +1,41 @@
+﻿ERROR: quantized_sram.v:18: $readmemh: Unable to open mem_weights/conv1_weights.mem for reading.
+[SRAM] Loaded weights from mem_weights/conv1_weights.mem
+ERROR: quantized_sram.v:18: $readmemh: Unable to open mem_weights/conv2_weights.mem for reading.
+[SRAM] Loaded weights from mem_weights/conv2_weights.mem
+ERROR: quantized_sram.v:18: $readmemh: Unable to open mem_weights/fc1_weights.mem for reading.
+[SRAM] Loaded weights from mem_weights/fc1_weights.mem
+ERROR: quantized_sram.v:18: $readmemh: Unable to open mem_weights/fc2_weights.mem for reading.
+[SRAM] Loaded weights from mem_weights/fc2_weights.mem
+VCD info: dumpfile sparse_snn_top_tb.vcd opened for output.
+
+=============================================
+  Sparse SNN Top-Level Testbench
+=============================================
+
+[45000] Reset released
+[PASS] sys_enable = 1 after reset
+[PASS] done = 0 after reset
+
+--- Test 1: Feeding spike events ---
+[EVENT] sys_enable went LOW at cycle 25 (early exit triggered)
+[INFO] Fed 100 spike events (pre_id 0..99)
+
+--- Test 2: Burst redundancy check ---
+[INFO] Fed 10 identical spike events (pre_id=42)
+
+--- Test 3: Running pipeline ---
+[PASS] done asserted at cycle 115 (time 1155000)
+[PASS] sys_enable deasserted when done
+
+--- Final State ---
+  final_prediction = 0000000000
+  sys_enable       = 0
+  done             = 1
+  cycle_count      = 116
+
+=============================================
+  Testbench Complete
+  Waveforms: sparse_snn_top_tb.vcd
+=============================================
+
+tb_sparse_snn_top.v:174: $finish called at 1265000 (1ps)

@@ -1,0 +1,47 @@
+﻿WARNING: quantized_sram.v:18: $readmemh(../mem_weights/conv1_weights.mem): Not enough words in the file for the requested range [0:2047].
+[SRAM] Loaded weights from ../mem_weights/conv1_weights.mem
+WARNING: quantized_sram.v:18: $readmemh(../mem_weights/fc2_weights.mem): Not enough words in the file for the requested range [0:2047].
+[SRAM] Loaded weights from ../mem_weights/fc2_weights.mem
+VCD info: dumpfile sram_weights_tb.vcd opened for output.
+
+========================================
+  Conv1 SRAM - First 10 INT8 Weights
+========================================
+  addr[0] = 21 (hex: 15)
+  addr[1] = -18 (hex: ee)
+  addr[2] = -21 (hex: eb)
+  addr[3] = -50 (hex: ce)
+  addr[4] = 16 (hex: 10)
+  addr[5] = 5 (hex: 05)
+  addr[6] = 60 (hex: 3c)
+  addr[7] = 2 (hex: 02)
+  addr[8] = 31 (hex: 1f)
+  addr[9] = -51 (hex: cd)
+
+========================================
+  Read Enable = 0 (Power Save Mode)
+========================================
+  addr[5] with re=0 -> data = 0 (expected: 0)
+
+========================================
+  FC2 SRAM - Output Layer Weights
+  (10 classes x 128 inputs = 1280 total)
+========================================
+  class[0] first weight = 56 (hex: 38)
+  class[1] first weight = 25 (hex: 19)
+  class[2] first weight = 46 (hex: 2e)
+  class[3] first weight = -12 (hex: f4)
+  class[4] first weight = 5 (hex: 05)
+  class[5] first weight = 28 (hex: 1c)
+  class[6] first weight = 12 (hex: 0c)
+  class[7] first weight = 70 (hex: 46)
+  class[8] first weight = -15 (hex: f1)
+  class[9] first weight = 65 (hex: 41)
+
+========================================
+  Software-Hardware Bridge Verified!
+  PyTorch weights successfully loaded
+  into Verilog SRAM via $readmemh.
+========================================
+
+tb_sram_weights.v:131: $finish called at 236000 (1ps)

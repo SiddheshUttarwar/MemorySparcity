@@ -1,0 +1,49 @@
+﻿WARNING: quantized_sram.v:18: $readmemh(../mem_weights/conv1_weights.mem): Not enough words in the file for the requested range [0:2047].
+[SRAM] Loaded weights from ../mem_weights/conv1_weights.mem
+WARNING: quantized_sram.v:18: $readmemh(../mem_weights/conv2_weights.mem): Not enough words in the file for the requested range [0:65535].
+[SRAM] Loaded weights from ../mem_weights/conv2_weights.mem
+WARNING: quantized_sram.v:18: $readmemh(../mem_weights/fc1_weights.mem): Not enough words in the file for the requested range [0:524287].
+[SRAM] Loaded weights from ../mem_weights/fc1_weights.mem
+WARNING: quantized_sram.v:18: $readmemh(../mem_weights/fc2_weights.mem): Not enough words in the file for the requested range [0:2047].
+[SRAM] Loaded weights from ../mem_weights/fc2_weights.mem
+VCD info: dumpfile sparse_snn_top_tb.vcd opened for output.
+
+=============================================
+  Sparse SNN Top-Level Testbench (Phase 2)
+=============================================
+
+[45000] Reset released
+[PASS] sys_enable = 1 after reset
+[PASS] done = 0 after reset
+
+--- Test 1: Start inference + feed spikes ---
+[LAYER] Entered LAYER1 at cycle 8, T=0
+[INFO] Start pulsed, fed 50 spike events (pre_id 0..49)
+
+--- Test 2: Burst redundancy check ---
+[INFO] Fed 5 identical spike events (pre_id=42)
+
+--- Test 3: Running pipeline (monitoring state) ---
+[INFO] layer_state = 1 at cycle 62
+[INFO] ...cycle 500062, layer_state=2, neuron=9804, synapse=49, T=0
+[INFO] ...cycle 1000062, layer_state=1, neuron=19608, synapse=46, T=0
+[LAYER] Entered POOL1 at cycle 1279496
+[LAYER] Entered LAYER2 at cycle 1304584
+[INFO] ...cycle 1500062, layer_state=4, neuron=244, synapse=34, T=0
+[INFO] ...cycle 2000062, layer_state=4, neuron=868, synapse=210, T=0
+[INFO] Timeout at 2M cycles - pipeline still running
+[INFO] state=4, neuron=868, synapse=210, T=0
+
+--- Final State ---
+  final_prediction = 0000000000
+  sys_enable       = 1
+  done             = 0
+  cycle_count      = 2000063
+  timesteps done   = 0
+
+=============================================
+  Testbench Complete
+  Waveforms: sparse_snn_top_tb.vcd
+=============================================
+
+tb_sparse_snn_top.v:192: $finish called at 20000735000 (1ps)

@@ -5,6 +5,7 @@ module early_exit_fsm #(
 )(
     input wire clk,
     input wire rst_n,
+    input wire timestep_tick,
     input wire [NUM_CLASSES-1:0] class_spikes,
     output reg sys_enable,
     output reg done
@@ -35,18 +36,20 @@ module early_exit_fsm #(
             end
         end else if (sys_enable) begin
             
-            // Aggregate readout spikes
-            for (i = 0; i < NUM_CLASSES; i = i + 1) begin
-                if (class_spikes[i]) begin
-                    class_accumulators[i] <= class_accumulators[i] + 1;
+            // Aggregate readout spikes (only once per timestep when layer 4 writes its spikes)
+            if (timestep_tick) begin
+                for (i = 0; i < NUM_CLASSES; i = i + 1) begin
+                    if (class_spikes[i]) begin
+                        class_accumulators[i] <= class_accumulators[i] + 1;
+                    end
                 end
+                
+                time_step <= time_step + 1;
             end
-            
-            time_step <= time_step + 1;
             
             // SHORT CIRCUIT: Halt and shut down SRAM read enables globally!
             // STATISTICAL BENCHMARK: Triggers between T=4 and T=7 on average (vs Baseline T=20)
-            if (confidence_reached || time_step == (T_MAX - 1)) begin
+            if (confidence_reached || (time_step == (T_MAX - 1) && timestep_tick)) begin
                 sys_enable <= 1'b0;
                 done <= 1'b1;
             end

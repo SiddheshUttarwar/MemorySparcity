@@ -30,15 +30,14 @@ module avg_pool #(
             pool_valid <= 1'b0;
         end else if (sys_en && data_valid) begin
             if (count == 2'd3) begin
-                // Fourth input: compute average and output
-                // sum >> 2  =  sum / 4  (arithmetic right shift for signed values)
-                pool_out   <= (accum + data_in) >>> 2;
+                // Fourth input: compute max (logical OR) and output
+                pool_out   <= (accum > 0 || data_in > 0) ? 16'sd1 : 16'sd0;
                 pool_valid <= 1'b1;
                 accum      <= {(DATA_WIDTH+2){1'b0}};
                 count      <= 2'd0;
             end else begin
-                // Accumulate inputs 0, 1, 2
-                accum      <= accum + data_in;
+                // Accumulate inputs 0, 1, 2 using logical OR semantics
+                accum      <= (accum > 0 || data_in > 0) ? 16'sd1 : 16'sd0;
                 count      <= count + 1;
                 pool_valid <= 1'b0;
             end

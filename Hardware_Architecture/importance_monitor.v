@@ -6,14 +6,15 @@ module importance_monitor #(
 )(
     input wire clk,
     input wire rst_n,
+    input wire timestep_tick,
     input wire spike_valid,
     input wire [ID_W-1:0] pre_id,
     output wire imp_keep
 );
     // State
     reg [3:0] cnt [0:NUM_PRE-1];
-    reg [15:0] tick_counter;
-    wire win_tick = (tick_counter == WIN);
+    reg [15:0] timestep_counter;
+    wire win_tick = timestep_tick && (timestep_counter == WIN - 1);
     
     integer i;
 
@@ -25,24 +26,26 @@ module importance_monitor #(
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            tick_counter <= 16'd0;
+            timestep_counter <= 16'd0;
             for (i=0; i<NUM_PRE; i=i+1) begin
                 cnt[i] <= 4'd0;
             end
         end else begin
-            // Tick decay (right shift by 1)
-            if (win_tick) begin
-                tick_counter <= 16'd0;
-                for (i=0; i<NUM_PRE; i=i+1) begin
-                    cnt[i] <= cnt[i] >> 1;
+            // Tick decay (right shift by 1) on timestep boundaries
+            if (timestep_tick) begin
+                if (win_tick) begin
+                    timestep_counter <= 16'd0;
+                    for (i=0; i<NUM_PRE; i=i+1) begin
+                        cnt[i] <= cnt[i] >> 1;
+                    end
+                end else begin
+                    timestep_counter <= timestep_counter + 1;
                 end
-            end else begin
-                tick_counter <= tick_counter + 1;
             end
             
             // Spike Accumulation
             if (spike_valid) begin
-                if (win_tick) begin
+                if (win_tick) begin // Edge case: spike arrives exactly on decay cycle
                     cnt[pre_id] <= (cnt[pre_id] >> 1) + 4'd1;
                 end else if (cnt[pre_id] < 4'd15) begin // Saturating addition
                     cnt[pre_id] <= cnt[pre_id] + 4'd1;

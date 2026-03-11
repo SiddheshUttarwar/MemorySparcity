@@ -5,6 +5,7 @@ module dynamic_gatekeeper #(
     input wire clk,
     input wire rst_n,
     input wire global_enable,
+    input wire timestep_tick,
     input wire spike_valid,
     input wire [ID_W-1:0] pre_id,
     
@@ -18,26 +19,31 @@ module dynamic_gatekeeper #(
     wire imp_keep;
     wire corr_keep;
 
+    // Filter 1: Importance Monitor
     importance_monitor #(
         .NUM_PRE(NUM_PRE),
         .ID_W(ID_W),
-        .WIN(255),
+        .WIN(5),
         .THRESH(1) 
     ) imp_mon_inst (
         .clk(clk),
         .rst_n(rst_n),
-        .spike_valid(spike_valid),
+        .timestep_tick(timestep_tick),
+        .spike_valid(global_enable && spike_valid),
         .pre_id(pre_id),
         .imp_keep(imp_keep)
     );
 
+    // Filter 2: Burst Redundancy
     burst_redundancy #(
         .ID_W(ID_W),
+        .NUM_PRE(NUM_PRE),
         .K_MAX(1)
     ) burst_red_inst (
         .clk(clk),
         .rst_n(rst_n),
-        .spike_valid(spike_valid),
+        .timestep_tick(timestep_tick),
+        .spike_valid(global_enable && spike_valid), // Only monitor when globally enabled
         .pre_id(pre_id),
         .corr_keep(corr_keep)
     );
